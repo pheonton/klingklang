@@ -1,0 +1,1395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Klingklang</title>
+<meta name="description" content="Plays music straight from a folder on your computer.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#b4451f">
+<style>
+@font-face{font-family:"Atkinson Hyperlegible";font-style:normal;font-weight:400;font-display:swap;src:url(fonts/atkinson-hyperlegible-latin-400-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Atkinson Hyperlegible";font-style:normal;font-weight:700;font-display:swap;src:url(fonts/atkinson-hyperlegible-latin-700-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Atkinson Hyperlegible";font-style:normal;font-weight:400;font-display:swap;src:url(fonts/atkinson-hyperlegible-latin-ext-400-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Atkinson Hyperlegible";font-style:normal;font-weight:700;font-display:swap;src:url(fonts/atkinson-hyperlegible-latin-ext-700-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+
+:root{
+  --bg:#faf6f0; --surface:#ffffff; --surface-2:#f1ebe2; --text:#2a211b; --muted:#6f6259;
+  --line:#e4dacd; --accent:#b4451f; --accent-hover:#9a3916; --accent-ink:#ffffff; --accent-soft:#f7e1d6;
+  --shadow:0 1px 2px rgba(60,40,20,.08),0 4px 16px rgba(60,40,20,.08);
+  --tile-l1:62%; --tile-l2:46%;
+  --radius:14px; --player-h:165px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#191512; --surface:#241e1a; --surface-2:#2f2722; --text:#f3ebe3; --muted:#b3a597;
+    --line:#3a312a; --accent:#f08a5d; --accent-hover:#f5a27c; --accent-ink:#1d120c; --accent-soft:#4a2c1f;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.3);
+    --tile-l1:42%; --tile-l2:30%;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{font-size:18px}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Atkinson Hyperlegible",system-ui,sans-serif;line-height:1.4;-webkit-font-smoothing:antialiased}
+body.has-player{padding-bottom:var(--player-h)}
+button,input{font:inherit;color:inherit}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+svg.i{width:1.4em;height:1.4em;fill:currentColor;flex:none}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5em;min-height:52px;padding:0 1.2em;border-radius:999px;border:0;cursor:pointer;font-weight:700;text-decoration:none;background:var(--surface-2);color:var(--text)}
+.btn:hover{background:var(--line)}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.big{min-height:64px;font-size:1.15rem;padding:0 1.8em}
+.btn.link{background:none;color:var(--muted);font-weight:400;text-decoration:underline;min-height:44px}
+
+/* Top bar */
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;padding:10px 16px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+/* Path bar: Home › music folder › subfolders. Wide screens show up to 3 subfolders,
+   phones show Home, one step back and the current folder. */
+.crumbbar{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.crumb{display:inline-flex;align-items:center;gap:.45em;min-height:48px;min-width:0;max-width:14em;flex:0 1 auto;padding:0 .95em;border-radius:999px;background:var(--surface-2);font-weight:700;text-decoration:none}
+a.crumb:hover{background:var(--line)}
+.crumb .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crumb.icon-only{flex:none;width:48px;padding:0;justify-content:center}
+.crumb.home{flex:none}
+.crumb.here{background:none;padding:0 .4em;flex-shrink:.2;font-size:1.1rem}
+.sep{flex:none;color:var(--muted);font-weight:700;padding:0 2px}
+.narrow{display:none!important}
+.iconbtn{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;border:0;background:var(--surface-2);cursor:pointer}
+.iconbtn:hover{background:var(--line)}
+
+/* Views */
+main{max-width:1200px;margin:0 auto;padding:20px 16px 40px}
+.center{min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px}
+.center h1{font-size:2rem;margin:0}
+.center p{margin:0;color:var(--muted);max-width:28em}
+.center .logo{width:96px;height:96px;border-radius:24px}
+.loading{color:var(--muted);padding:40px 0;text-align:center}
+
+.head{display:flex;gap:24px;align-items:flex-end;margin-bottom:28px}
+.head .cover{width:180px;height:180px;border-radius:var(--radius);box-shadow:var(--shadow);object-fit:cover;flex:none;background:var(--surface-2)}
+.head .meta{min-width:0;flex:1}
+.head h1{font-size:2.1rem;line-height:1.15;margin:0 0 6px;overflow-wrap:anywhere}
+.head .sub{color:var(--muted);margin:0 0 14px}
+.head .actions{display:flex;flex-wrap:wrap;gap:10px}
+
+h2{font-size:1.25rem;margin:28px 0 12px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:18px}
+.tile{display:block;text-decoration:none;border-radius:var(--radius);padding:8px;margin:-8px}
+.tile:hover{background:var(--surface-2)}
+.tile .art{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);
+  background:linear-gradient(135deg,hsl(var(--h) 45% var(--tile-l1)),hsl(calc(var(--h) + 40) 45% var(--tile-l2)));display:flex;align-items:center;justify-content:center;color:#fff}
+.tile .art .letter{font-size:3.2rem;font-weight:700;opacity:.92;text-shadow:0 2px 8px rgba(0,0,0,.2)}
+.tile .art svg.i{width:40%;height:40%;opacity:.9}
+.tile .art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tile .art .collage{position:absolute;inset:0;display:grid;grid-template:1fr 1fr / 1fr 1fr;gap:2px;background:var(--surface)}
+.tile .art .collage img{position:static;min-width:0;min-height:0}
+.tile .name{margin-top:8px;font-weight:700;line-height:1.25;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+.songs{display:flex;flex-direction:column;gap:2px}
+.row{display:flex;align-items:center;gap:14px;width:100%;min-height:60px;padding:8px 14px;border:0;border-radius:12px;background:none;text-align:left;cursor:pointer}
+.row:hover{background:var(--surface-2)}
+.row .no{width:2em;text-align:right;color:var(--muted);flex:none;font-variant-numeric:tabular-nums}
+.row .txt{min-width:0;flex:1}
+.row .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .a{color:var(--muted);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .eq{display:none;width:2em;justify-content:flex-end;color:var(--accent);flex:none}
+.row.playing{background:var(--accent-soft)}
+.row.playing .t{color:var(--accent)}
+.row.playing .eq{display:flex}
+.row.playing .no{display:none}
+.row.missing{opacity:.5;cursor:default}
+.row.missing:hover{background:none}
+.empty{color:var(--muted);padding:30px 0}
+
+/* Player */
+.player{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(0,0,0,.08);padding:10px 16px 14px}
+.player .inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr auto 1fr;grid-template-areas:"seek seek seek" "now ctl vol";align-items:center;gap:6px 16px}
+.seekrow{grid-area:seek;display:flex;align-items:center;gap:12px;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.seekrow span{width:3.2em;text-align:center}
+.now{grid-area:now;display:flex;align-items:center;gap:12px;min-width:0;border:0;background:none;padding:4px;border-radius:12px;text-align:left;cursor:pointer}
+.now:hover{background:var(--surface-2)}
+.now img,.now .ph{width:64px;height:64px;border-radius:10px;object-fit:cover;flex:none;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.now .txt{min-width:0}
+.now .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now .a{color:var(--muted);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now .n{color:var(--muted);font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85}
+/* "Up next" panel */
+dialog.sheet{width:min(640px,calc(100vw - 32px));max-height:min(80vh,800px);padding:0;display:none;flex-direction:column}
+dialog.sheet[open]{display:flex}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 10px}
+.sheet-head h2{margin:0}
+.sheet .songs{overflow-y:auto;padding:0 10px 14px}
+.ctl{grid-area:ctl;display:flex;align-items:center;gap:14px}
+.ctl .iconbtn{width:56px;height:56px}
+.ctl .play{width:72px;height:72px;background:var(--accent);color:var(--accent-ink)}
+.ctl .play:hover{background:var(--accent-hover)}
+.ctl .play svg.i{width:2.1em;height:2.1em}
+.vol{grid-area:vol;display:flex;align-items:center;justify-content:flex-end;gap:10px;color:var(--muted)}
+.vol input{width:130px}
+
+input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:28px;background:none;cursor:pointer;--p:0%}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:linear-gradient(to right,var(--accent) var(--p),var(--line) var(--p))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-7px;border-radius:50%;background:var(--accent);border:3px solid var(--surface)}
+input[type=range]::-moz-range-track{height:8px;border-radius:4px;background:linear-gradient(to right,var(--accent) var(--p),var(--line) var(--p))}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);border:3px solid var(--surface)}
+
+/* Menu & toast */
+dialog{border:0;border-radius:20px;padding:28px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);width:min(440px,calc(100vw - 32px))}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+dialog h2{margin:0 0 6px}
+dialog p{color:var(--muted);margin:0 0 18px}
+dialog .stack{display:flex;flex-direction:column;gap:10px}
+button.tile{border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;width:calc(100% + 16px)}
+.tile.add .art{background:none;border:3px dashed var(--line);box-shadow:none;color:var(--muted)}
+.fitem{display:flex;flex-direction:column;gap:6px}
+.frow{display:flex;gap:8px;align-items:center}
+.check{display:flex;align-items:center;gap:10px;padding:2px 12px;color:var(--muted);font-size:.9rem;cursor:pointer}
+.check input{width:22px;height:22px;accent-color:var(--accent);flex:none;margin:0}
+.tile .badge{display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:2px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.8rem;font-weight:700}
+.tile .badge svg.i{width:1em;height:1em}
+.frow .btn{flex:1;justify-content:flex-start;min-width:0}
+.frow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+dialog .stack + .stack{margin-top:18px}
+.toast{position:fixed;left:50%;bottom:calc(var(--player-h) + 16px);transform:translateX(-50%);z-index:10;background:var(--text);color:var(--bg);padding:14px 22px;border-radius:14px;box-shadow:var(--shadow);max-width:calc(100vw - 32px);opacity:0;pointer-events:none;transition:opacity .2s}
+body:not(.has-player) .toast{bottom:24px}
+.toast.show{opacity:1}
+
+@media (max-width:700px){
+  :root{--player-h:205px}
+  .head{flex-direction:column;align-items:flex-start;gap:16px}
+  .head .cover{width:140px;height:140px}
+  .head h1{font-size:1.7rem}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px}
+  .player .inner{grid-template-columns:1fr;grid-template-areas:"now" "seek" "ctl"}
+  .ctl{justify-content:center}
+  .vol{display:none}
+  .wide{display:none!important}
+  .narrow{display:inline-flex!important}
+  .crumb.home .lbl{display:none}
+  .crumb.home{width:48px;padding:0;justify-content:center}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l6-4z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3z"/></symbol>
+  <symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12z"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM6 4h5v8l-2.5-1.5L6 12z"/></symbol>
+  <symbol id="i-add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.47.47 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.47.47 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></symbol>
+</svg>
+
+<header class="top" id="top" hidden>
+  <nav class="crumbbar" id="crumbbar"></nav>
+  <button class="iconbtn" id="menuBtn" type="button"><svg class="i"><use href="#i-settings"/></svg></button>
+</header>
+
+<main id="view"></main>
+
+<footer class="player" id="player" hidden>
+  <div class="inner">
+    <div class="seekrow">
+      <span id="tCur">0:00</span>
+      <input type="range" id="seek" min="0" max="0" step="any" value="0">
+      <span id="tDur">0:00</span>
+    </div>
+    <button class="now" id="now" type="button">
+      <span class="ph" id="nowPh"><svg class="i"><use href="#i-note"/></svg></span>
+      <img id="nowImg" alt="" hidden>
+      <span class="txt"><div class="t" id="nowTitle"></div><div class="a" id="nowArtist"></div><div class="n" id="nowNext"></div></span>
+    </button>
+    <div class="ctl">
+      <button class="iconbtn" id="prevBtn" type="button"><svg class="i"><use href="#i-prev"/></svg></button>
+      <button class="iconbtn play" id="playBtn" type="button"><svg class="i"><use id="playIcon" href="#i-play"/></svg></button>
+      <button class="iconbtn" id="nextBtn" type="button"><svg class="i"><use href="#i-next"/></svg></button>
+      <button class="iconbtn" id="queueBtn" type="button"><svg class="i"><use href="#i-list"/></svg></button>
+    </div>
+    <div class="vol">
+      <svg class="i"><use href="#i-volume"/></svg>
+      <input type="range" id="volume" min="0" max="1" step="0.01" value="1">
+    </div>
+  </div>
+</footer>
+
+<dialog id="menu">
+  <h2 data-t="menu"></h2>
+  <p id="menuFolder"></p>
+  <div class="stack">
+    <button class="btn" id="manageFoldersBtn" type="button"><svg class="i"><use href="#i-folder"/></svg><span data-t="manageFolders"></span></button>
+    <button class="btn" id="clearCacheBtn" type="button" data-t="clearCache"></button>
+    <button class="btn primary" id="closeMenuBtn" type="button" data-t="close"></button>
+  </div>
+</dialog>
+
+<dialog id="folders">
+  <h2 data-t="foldersTitle"></h2>
+  <p data-t="foldersText"></p>
+  <div class="stack" id="folderList"></div>
+  <div class="stack">
+    <button class="btn" id="addFolderBtn" type="button"><svg class="i"><use href="#i-folder"/></svg><span data-t="addFolder"></span></button>
+    <button class="btn" id="closeFoldersBtn" type="button" data-t="close"></button>
+  </div>
+</dialog>
+
+<dialog id="queue" class="sheet">
+  <div class="sheet-head">
+    <h2 data-t="upNextTitle"></h2>
+    <button class="iconbtn" id="closeQueueBtn" type="button"><svg class="i"><use href="#i-close"/></svg></button>
+  </div>
+  <div class="songs" id="queueList"></div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* ---------- Texts (add a language by copying a block) ---------- */
+const STRINGS = {
+  en: {
+    home: 'Home', back: 'Back', menu: 'Settings', close: 'Close',
+    welcomeTitle: 'Welcome!', welcomeText: 'Show me the folder where your music is, and I’ll play it.',
+    chooseFolder: 'Choose music folder',
+    homeTitle: 'Your music', manageFolders: 'Manage music folders',
+    foldersTitle: 'Music folders', foldersText: 'Each folder remembers where you stopped.',
+    addFolder: 'Add a music folder', remove: 'Remove from list',
+    removeConfirm: n => `Remove “${n}” from the list? The files themselves stay where they are.`,
+    audiobooks: 'Audiobooks: each book remembers its own place',
+    continue: 'Continue', startOver: 'Start over', started: 'Started',
+    stoppedAt: (t, time) => `You stopped at “${t}”, ${time}.`,
+    unsupportedTitle: 'This browser can’t open music folders',
+    unsupportedText: 'Please open this page in Microsoft Edge or Google Chrome.',
+    folders: 'Folders', playlists: 'Playlists', songs: 'Songs',
+    playAll: 'Play all', shuffle: 'Shuffle', loading: 'Loading…',
+    empty: 'There is no music in this folder.', notFound: 'This folder or playlist isn’t there anymore.',
+    songCount: n => n === 1 ? '1 song' : `${n} songs`, missing: 'Not found',
+    play: 'Play', pause: 'Pause', prev: 'Previous song', next: 'Next song', volume: 'Volume',
+    showAlbum: 'Show the folder of this song',
+    upNext: t => `Next: ${t}`, upNextTitle: 'Up next',
+    cantPlay: n => `Couldn’t play “${n}”. Skipping it.`,
+    permissionDenied: 'Without permission I can’t read your music.',
+    menuFolder: n => `Music folder: “${n}”. Folders are read fresh each time you open them, so new songs show up right away.`,
+    clearCache: 'Forget saved song details', cacheCleared: 'Done. Song details will be read again.',
+  },
+  de: {
+    home: 'Start', back: 'Zurück', menu: 'Einstellungen', close: 'Schließen',
+    welcomeTitle: 'Willkommen!', welcomeText: 'Zeig mir den Ordner mit deiner Musik, dann spiele ich sie ab.',
+    chooseFolder: 'Musikordner auswählen',
+    homeTitle: 'Deine Musik', manageFolders: 'Musikordner verwalten',
+    foldersTitle: 'Musikordner', foldersText: 'Jeder Ordner merkt sich, wo du aufgehört hast.',
+    addFolder: 'Musikordner hinzufügen', remove: 'Aus der Liste entfernen',
+    removeConfirm: n => `„${n}“ aus der Liste entfernen? Die Dateien selbst bleiben, wo sie sind.`,
+    audiobooks: 'Hörbücher: jedes Buch merkt sich seine Stelle',
+    continue: 'Weiterhören', startOver: 'Von vorne', started: 'Angefangen',
+    stoppedAt: (t, time) => `Du warst bei „${t}“, ${time}.`,
+    unsupportedTitle: 'Dieser Browser kann keine Musikordner öffnen',
+    unsupportedText: 'Bitte öffne diese Seite in Microsoft Edge oder Google Chrome.',
+    folders: 'Ordner', playlists: 'Wiedergabelisten', songs: 'Lieder',
+    playAll: 'Alle abspielen', shuffle: 'Zufällig', loading: 'Wird geladen…',
+    empty: 'In diesem Ordner ist keine Musik.', notFound: 'Diesen Ordner oder diese Liste gibt es nicht mehr.',
+    songCount: n => n === 1 ? '1 Lied' : `${n} Lieder`, missing: 'Nicht gefunden',
+    play: 'Abspielen', pause: 'Pause', prev: 'Vorheriges Lied', next: 'Nächstes Lied', volume: 'Lautstärke',
+    showAlbum: 'Ordner dieses Liedes zeigen',
+    upNext: t => `Als Nächstes: ${t}`, upNextTitle: 'Als Nächstes',
+    cantPlay: n => `„${n}“ lässt sich nicht abspielen. Weiter zum nächsten.`,
+    permissionDenied: 'Ohne Erlaubnis kann ich deine Musik nicht lesen.',
+    menuFolder: n => `Musikordner: „${n}“. Ordner werden bei jedem Öffnen neu gelesen, neue Lieder erscheinen also sofort.`,
+    clearCache: 'Gespeicherte Liedinfos vergessen', cacheCleared: 'Erledigt. Die Liedinfos werden neu gelesen.',
+  },
+};
+const LANG = (navigator.language || 'en').slice(0, 2) in STRINGS ? (navigator.language || 'en').slice(0, 2) : 'en';
+const T = STRINGS[LANG];
+document.documentElement.lang = LANG;
+
+/* ---------- Settings ---------- */
+const APP_NAME = 'Klingklang';
+// Pictures looked for in each folder, in this order.
+const COVER_NAMES = [
+  'cover.jpg', 'Cover.jpg', 'COVER.JPG', 'cover.jpeg', 'Cover.jpeg', 'cover.png', 'Cover.png', 'cover.webp', 'Cover.webp',
+  'folder.jpg', 'Folder.jpg', 'folder.png', 'folder.webp', 'Folder.webp', 'front.jpg', 'Front.jpg',
+];
+// Only formats the browser can play natively are shown.
+const AUDIO_TYPES = {
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', m4b: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac',
+  ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg; codecs=opus', wav: 'audio/wav', weba: 'audio/webm',
+};
+const PLAYLIST_EXT = new Set(['m3u', 'm3u8']);
+// How many folder levels down a folder without its own picture looks for one to borrow.
+const COVER_DEPTH = 2;
+// Folders with these words in their name are set up as audiobook folders when added.
+const AUDIOBOOK_NAMES = /h(ö|oe)rb(ü|ue)ch|h(ö|oe)rspiel|audio ?book/i;
+// Continuing an audiobook starts this many seconds earlier, to catch the thread again.
+const RESUME_REWIND = 5;
+
+const probe = document.createElement('audio');
+const PLAYABLE = new Set(Object.keys(AUDIO_TYPES).filter(e => probe.canPlayType(AUDIO_TYPES[e]) !== ''));
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/* ---------- Small helpers ---------- */
+const $ = id => document.getElementById(id);
+const view = $('view');
+
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k === 'style') e.style.cssText = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) e.append(kid);
+  return e;
+}
+function icon(name) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('class', 'i');
+  const u = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  u.setAttribute('href', '#i-' + name);
+  s.append(u);
+  return s;
+}
+const extOf = name => { const i = name.lastIndexOf('.'); return i < 0 ? '' : name.slice(i + 1).toLowerCase(); };
+const baseName = name => name.replace(/\.[^.]+$/, '');
+const dirOf = path => { const i = path.lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); };
+const join = (dir, name) => dir ? dir + '/' + name : name;
+const toNum = s => { const n = parseInt(s, 10); return Number.isFinite(n) ? n : null; };
+const fmtTime = s => { if (!Number.isFinite(s)) return '0:00'; s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const hueOf = s => { let h = 0; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
+
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i], i); } };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 4500);
+}
+
+for (const e of document.querySelectorAll('[data-t]')) e.textContent = T[e.dataset.t];
+$('menuBtn').title = T.menu; $('menuBtn').setAttribute('aria-label', T.menu);
+$('prevBtn').title = T.prev; $('prevBtn').setAttribute('aria-label', T.prev);
+$('nextBtn').title = T.next; $('nextBtn').setAttribute('aria-label', T.next);
+$('playBtn').setAttribute('aria-label', T.play);
+$('volume').setAttribute('aria-label', T.volume);
+$('now').title = T.showAlbum;
+$('queueBtn').title = T.upNextTitle; $('queueBtn').setAttribute('aria-label', T.upNextTitle);
+$('closeQueueBtn').title = T.close; $('closeQueueBtn').setAttribute('aria-label', T.close);
+
+/* ---------- Saved data (IndexedDB): the music folder and a cache of song details ---------- */
+const db = (() => {
+  let opening;
+  const open = () => opening ||= new Promise((resolve, reject) => {
+    const r = indexedDB.open('folder-music-player', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('kv'); r.result.createObjectStore('tags'); };
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  async function run(store, mode, fn) {
+    const d = await open();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction(store, mode);
+      const r = fn(tx.objectStore(store));
+      tx.oncomplete = () => resolve(r.result);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  return {
+    get: (s, k) => run(s, 'readonly', st => st.get(k)),
+    set: (s, k, v) => run(s, 'readwrite', st => st.put(v, k)),
+    clear: s => run(s, 'readwrite', st => st.clear()),
+    clearPrefix: (s, prefix) => run(s, 'readwrite', st => st.delete(IDBKeyRange.bound(prefix, prefix + '\uffff'))),
+  };
+})();
+
+/* ---------- Reading song details (tags) ---------- */
+// Only the start of each file is read (or the moov box for M4A), never the whole song.
+const utf8 = new TextDecoder('utf-8');
+const latin1 = new TextDecoder('windows-1252');
+const ascii = (b, s, e) => latin1.decode(b.subarray(s, e));
+const u32 = (b, i) => ((b[i] << 24) >>> 0) + (b[i + 1] << 16) + (b[i + 2] << 8) + b[i + 3];
+const synchsafe = (b, i) => (b[i] & 0x7f) << 21 | (b[i + 1] & 0x7f) << 14 | (b[i + 2] & 0x7f) << 7 | (b[i + 3] & 0x7f);
+const readBytes = async (blob, start, end) => new Uint8Array(await blob.slice(start, end).arrayBuffer());
+
+// Reads byte ranges from a file, keeping one 64 KB window so small reads don't each hit the disk.
+function rangeReader(blob) {
+  let buf = new Uint8Array(0), at = 0;
+  return async (start, end) => {
+    if (start < at || end > at + buf.length) {
+      buf = await readBytes(blob, start, Math.max(end, start + 65536));
+      at = start;
+    }
+    return buf.subarray(start - at, end - at);
+  };
+}
+
+const removeUnsync = b => {
+  const out = new Uint8Array(b.length);
+  let n = 0;
+  for (let i = 0; i < b.length; i++) { out[n++] = b[i]; if (b[i] === 0xff && b[i + 1] === 0) i++; }
+  return out.subarray(0, n);
+};
+
+function id3Text(d) {
+  const enc = d[0], body = d.subarray(1);
+  let s;
+  if (enc === 0) s = latin1.decode(body);
+  else if (enc === 1) s = new TextDecoder(body[0] === 0xfe && body[1] === 0xff ? 'utf-16be' : 'utf-16le').decode(body);
+  else if (enc === 2) s = new TextDecoder('utf-16be').decode(body);
+  else s = utf8.decode(body);
+  return s.split('\0').map(x => x.replace(/^﻿/, '').trim()).filter(Boolean).join(', ');
+}
+
+const ID3_FRAMES = {
+  2: { TT2: 'title', TP1: 'artist', TAL: 'album', TRK: 'track', TPA: 'disc', TP2: 'albumArtist' },
+  3: { TIT2: 'title', TPE1: 'artist', TALB: 'album', TRCK: 'track', TPOS: 'disc', TPE2: 'albumArtist' },
+};
+
+async function readId3v2(file) {
+  const h = await readBytes(file, 0, 10);
+  if (h.length < 10 || ascii(h, 0, 3) !== 'ID3') return null;
+  const ver = h[3], flags = h[5], end = 10 + synchsafe(h, 6);
+  if (ver < 2 || ver > 4) return null;
+  let read = rangeReader(file);
+  if (flags & 0x80 && ver < 4) {
+    // Whole tag is "unsynchronised": undo it in memory (rare, old taggers only).
+    const whole = removeUnsync(await readBytes(file, 0, Math.min(end, 4 << 20)));
+    read = async (s, e) => whole.subarray(s, e);
+  }
+  let pos = 10;
+  if (flags & 0x40 && ver > 2) {
+    const e = await read(pos, pos + 4);
+    pos += ver === 4 ? synchsafe(e, 0) : u32(e, 0) + 4;
+  }
+  const ids = ID3_FRAMES[ver === 2 ? 2 : 3], idLen = ver === 2 ? 3 : 4, hdrLen = ver === 2 ? 6 : 10;
+  const tags = {};
+  while (pos + hdrLen <= end) {
+    const fh = await read(pos, pos + hdrLen);
+    if (fh.length < hdrLen || fh[0] === 0) break;
+    const id = ascii(fh, 0, idLen);
+    const size = ver === 2 ? (fh[3] << 16 | fh[4] << 8 | fh[5]) : ver === 4 ? synchsafe(fh, 4) : u32(fh, 4);
+    const start = pos + hdrLen;
+    if (size <= 0 || start + size > end) break;
+    const key = ids[id];
+    const fflags = ver > 2 ? fh[9] : 0;
+    const packed = ver === 4 ? fflags & 0x0c : fflags & 0xc0; // compressed or encrypted
+    if (key && !tags[key] && !packed && size < 65536) {
+      let d = await read(start, start + size);
+      if (ver === 4 && fflags & 0x02) d = removeUnsync(d);
+      if (ver === 4 && fflags & 0x01) d = d.subarray(4);
+      const v = id3Text(d);
+      if (v) tags[key] = v;
+    }
+    pos = start + size;
+  }
+  return { tags, end };
+}
+
+async function readId3v1(file) {
+  if (file.size < 128) return {};
+  const b = await readBytes(file, file.size - 128, file.size);
+  if (ascii(b, 0, 3) !== 'TAG') return {};
+  const f = (s, e) => latin1.decode(b.subarray(s, e)).replace(/\0.*$/s, '').trim();
+  const tags = {};
+  const title = f(3, 33), artist = f(33, 63), album = f(63, 93);
+  if (title) tags.title = title;
+  if (artist) tags.artist = artist;
+  if (album) tags.album = album;
+  if (b[125] === 0 && b[126]) tags.track = String(b[126]);
+  return tags;
+}
+
+const VORBIS_KEYS = { TITLE: 'title', ARTIST: 'artist', ALBUM: 'album', TRACKNUMBER: 'track', DISCNUMBER: 'disc', ALBUMARTIST: 'albumArtist' };
+function readVorbisComments(d, p) {
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const tags = {};
+  if (p + 4 > d.length) return tags;
+  p += 4 + dv.getUint32(p, true);
+  if (p + 4 > d.length) return tags;
+  const count = dv.getUint32(p, true);
+  p += 4;
+  for (let i = 0; i < count && p + 4 <= d.length; i++) {
+    const len = dv.getUint32(p, true);
+    p += 4;
+    if (p + len > d.length) break;
+    if (len < 8192) {
+      const s = utf8.decode(d.subarray(p, p + len));
+      const eq = s.indexOf('=');
+      const key = VORBIS_KEYS[s.slice(0, eq).toUpperCase()];
+      const val = s.slice(eq + 1).trim();
+      if (eq > 0 && key && val) tags[key] = tags[key] ? tags[key] + ', ' + val : val;
+    }
+    p += len;
+  }
+  return tags;
+}
+
+async function readFlac(file) {
+  const id3 = await readId3v2(file);
+  let pos = id3 ? id3.end : 0;
+  if (ascii(await readBytes(file, pos, pos + 4), 0, 4) !== 'fLaC') return id3 ? id3.tags : {};
+  pos += 4;
+  for (let i = 0; i < 64 && pos + 4 <= file.size; i++) {
+    const h = await readBytes(file, pos, pos + 4);
+    const last = h[0] & 0x80, type = h[0] & 0x7f, len = h[1] << 16 | h[2] << 8 | h[3];
+    if (type === 4) return readVorbisComments(await readBytes(file, pos + 4, pos + 4 + Math.min(len, 1 << 20)), 0);
+    if (last) break;
+    pos += 4 + len;
+  }
+  return {};
+}
+
+async function readOgg(file) {
+  // The comments are the second packet of the stream; collect packets from the first pages.
+  const d = await readBytes(file, 0, 256 * 1024);
+  const packets = [];
+  let cur = [], p = 0;
+  while (p + 27 <= d.length && packets.length < 2 && ascii(d, p, p + 4) === 'OggS') {
+    const nseg = d[p + 26];
+    let q = p + 27 + nseg;
+    for (let s = 0; s < nseg && packets.length < 2; s++) {
+      const L = d[p + 27 + s];
+      cur.push(d.subarray(q, Math.min(q + L, d.length)));
+      q += L;
+      if (L < 255) { packets.push(cur); cur = []; }
+    }
+    p = q;
+  }
+  if (packets.length < 2 && cur.length) packets.push(cur);
+  if (packets.length < 2) return {};
+  const parts = packets[1];
+  const c = new Uint8Array(parts.reduce((n, x) => n + x.length, 0));
+  let o = 0;
+  for (const x of parts) { c.set(x, o); o += x.length; }
+  if (c[0] === 3 && ascii(c, 1, 7) === 'vorbis') return readVorbisComments(c, 7);
+  if (ascii(c, 0, 8) === 'OpusTags') return readVorbisComments(c, 8);
+  return {};
+}
+
+function mp4Child(d, start, end, type) {
+  let p = start;
+  while (p + 8 <= end) {
+    let len = u32(d, p), hdr = 8;
+    const t = ascii(d, p + 4, p + 8);
+    if (len === 1) { len = u32(d, p + 8) * 2 ** 32 + u32(d, p + 12); hdr = 16; } else if (len === 0) len = end - p;
+    if (len < hdr) return null;
+    if (t === type) return [p + hdr, Math.min(p + len, end)];
+    p += len;
+  }
+  return null;
+}
+
+const MP4_KEYS = { '©nam': 'title', '©ART': 'artist', '©alb': 'album', aART: 'albumArtist' };
+async function readMp4(file) {
+  let pos = 0;
+  for (let i = 0; i < 64 && pos + 8 <= file.size; i++) {
+    const h = await readBytes(file, pos, pos + 16);
+    let len = u32(h, 0), hdr = 8;
+    const type = ascii(h, 4, 8);
+    if (len === 1) { len = u32(h, 8) * 2 ** 32 + u32(h, 12); hdr = 16; } else if (len === 0) len = file.size - pos;
+    if (len < hdr) break;
+    if (type === 'moov') return readMoov(await readBytes(file, pos + hdr, pos + Math.min(len, 16 << 20)));
+    pos += len;
+  }
+  return {};
+}
+function readMoov(d) {
+  const tags = {};
+  const udta = mp4Child(d, 0, d.length, 'udta');
+  const meta = udta && mp4Child(d, udta[0], udta[1], 'meta');
+  if (!meta) return tags;
+  // "meta" is normally a full box (4 extra bytes); QuickTime files leave them out.
+  const ms = ascii(d, meta[0] + 4, meta[0] + 8) === 'hdlr' ? meta[0] : meta[0] + 4;
+  const ilst = mp4Child(d, ms, meta[1], 'ilst');
+  if (!ilst) return tags;
+  let p = ilst[0];
+  while (p + 8 <= ilst[1]) {
+    const len = u32(d, p), type = ascii(d, p + 4, p + 8);
+    if (len < 8) break;
+    const data = mp4Child(d, p + 8, Math.min(p + len, ilst[1]), 'data');
+    if (data && data[1] - data[0] > 8) {
+      const v = d.subarray(data[0] + 8, data[1]);
+      if (MP4_KEYS[type]) { const s = utf8.decode(v).trim(); if (s) tags[MP4_KEYS[type]] = s; }
+      else if ((type === 'trkn' || type === 'disk') && v.length >= 4) {
+        const n = v[2] << 8 | v[3];
+        if (n) tags[type === 'trkn' ? 'track' : 'disc'] = String(n);
+      }
+    }
+    p += len;
+  }
+  return tags;
+}
+
+async function readTags(file) {
+  const ext = extOf(file.name);
+  if (ext === 'mp3' || ext === 'aac') {
+    const id3 = await readId3v2(file);
+    if (id3 && id3.tags.title) return id3.tags;
+    return { ...(await readId3v1(file)), ...(id3 ? id3.tags : {}) };
+  }
+  if (ext === 'flac') return readFlac(file);
+  if (ext === 'ogg' || ext === 'oga' || ext === 'opus') return readOgg(file);
+  if (ext === 'm4a' || ext === 'm4b') return readMp4(file);
+  return {};
+}
+
+/* ---------- The music folder ---------- */
+let root = null;
+let dirCache = new Map();   // folder path -> Promise<DirectoryHandle>; emptied on every page change
+let coverCache = new Map(); // folder path -> Promise<object URL or null>
+const tagMem = new Map();   // "folder id:path|size|date" -> tags
+
+function getDir(path) {
+  if (!path) return Promise.resolve(root);
+  if (!dirCache.has(path)) {
+    const i = path.lastIndexOf('/');
+    const p = getDir(i < 0 ? '' : path.slice(0, i)).then(d => d.getDirectoryHandle(path.slice(i + 1)));
+    p.catch(() => dirCache.delete(path));
+    dirCache.set(path, p);
+  }
+  return dirCache.get(path);
+}
+async function getFile(path) {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  try {
+    return await (await (await getDir(dirOf(path))).getFileHandle(name)).getFile();
+  } catch {
+    // A synced folder may have been replaced since we looked; look it up again from the top.
+    dirCache = new Map();
+    return (await (await getDir(dirOf(path))).getFileHandle(name)).getFile();
+  }
+}
+
+function getCover(dirPath) {
+  if (!coverCache.has(dirPath)) {
+    coverCache.set(dirPath, (async () => {
+      const d = await getDir(dirPath);
+      for (const n of COVER_NAMES) {
+        try { return URL.createObjectURL(await (await d.getFileHandle(n)).getFile()); } catch { /* try the next name */ }
+      }
+      return null;
+    })().catch(() => null));
+  }
+  return coverCache.get(dirPath);
+}
+
+async function getTags(track) {
+  const file = await getFile(track.path);
+  const cacheKey = current.id + ':' + track.path;
+  const memKey = cacheKey + '|' + file.size + '|' + file.lastModified;
+  if (tagMem.has(memKey)) return tagMem.get(memKey);
+  let tags = null;
+  try {
+    const c = await db.get('tags', cacheKey);
+    if (c && c.size === file.size && c.mtime === file.lastModified) tags = c.tags;
+  } catch { /* no cache available */ }
+  if (!tags) {
+    tags = await readTags(file).catch(() => ({}));
+    try { await db.set('tags', cacheKey, { size: file.size, mtime: file.lastModified, tags }); } catch { /* fine without cache */ }
+  }
+  tagMem.set(memKey, tags);
+  return tags;
+}
+async function loadTags(tracks, onEach) {
+  await mapLimit(tracks, 6, async (t, i) => {
+    try { t.tags = await getTags(t); } catch { t.missing = true; }
+    if (onEach) onEach(t, i);
+  });
+}
+
+const titleOf = t => (t.tags && t.tags.title) || t.extTitle || baseName(t.name);
+const artistOf = t => (t.tags && (t.tags.artist || t.tags.albumArtist)) || '';
+
+async function listDir(dir, path) {
+  const dirs = [], tracks = [], lists = [];
+  for await (const [name, h] of dir.entries()) {
+    if (name.startsWith('.') || name.startsWith('$')) continue;
+    if (h.kind === 'directory') dirs.push(name);
+    else {
+      const ext = extOf(name);
+      if (PLAYABLE.has(ext)) tracks.push({ path: join(path, name), name });
+      else if (PLAYLIST_EXT.has(ext)) lists.push(name);
+    }
+  }
+  dirs.sort(collator.compare);
+  lists.sort(collator.compare);
+  return { dirs, tracks, lists };
+}
+
+async function readPlaylist(path) {
+  const buf = new Uint8Array(await (await getFile(path)).arrayBuffer());
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { text = latin1.decode(buf); }
+  const base = dirOf(path).split('/').filter(Boolean);
+  const items = [];
+  let extTitle = null;
+  for (let line of text.split(/\r?\n/)) {
+    line = line.replace(/^﻿/, '').trim();
+    if (!line) continue;
+    if (line.startsWith('#')) {
+      if (/^#EXTINF:/i.test(line)) { const c = line.indexOf(','); extTitle = c >= 0 ? line.slice(c + 1).trim() || null : null; }
+      continue;
+    }
+    const segs = [...base];
+    for (const s of line.replace(/\\/g, '/').split('/')) {
+      if (!s || s === '.') continue;
+      if (s === '..') segs.pop(); else segs.push(s);
+    }
+    const name = segs[segs.length - 1] || line;
+    items.push({ path: segs.join('/'), name, extTitle, missing: !PLAYABLE.has(extOf(name)) });
+    extTitle = null;
+  }
+  return items;
+}
+
+/* ---------- Pages ---------- */
+function parseHash() {
+  const s = location.hash.replace(/^#/, '');
+  // The overview of all music folders; also shown until a folder is open.
+  if (!s || s === 'home' || !root) return { kind: 'home', path: '' };
+  const isList = s.startsWith('list/');
+  const raw = isList ? s.slice(5) : s.replace(/^\//, '');
+  let path = '';
+  try { path = raw.split('/').filter(Boolean).map(decodeURIComponent).join('/'); } catch { /* bad link: go home */ }
+  return { kind: isList ? 'list' : 'folder', path };
+}
+const hrefFor = (kind, path) => (kind === 'list' ? '#list/' : '#/') + path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+
+// Most subfolders shown in the path bar before the ones in between are folded into a back button.
+const MAX_SUBFOLDERS = 3;
+
+function updatePathBar(route) {
+  const items = [{ href: '#home', label: T.home, icon: 'home', cls: 'home', here: route.kind === 'home' }];
+  if (root) {
+    const segs = route.kind === 'home' ? [] : route.path.split('/').filter(Boolean);
+    const isList = route.kind === 'list';
+    items.push({ href: '#/', label: root.name, icon: current.audiobooks ? 'book' : 'folder', here: route.kind !== 'home' && !segs.length });
+    const subs = segs.map((name, i) => {
+      const last = i === segs.length - 1;
+      return isList && last
+        ? { href: hrefFor('list', route.path), label: baseName(name), icon: 'list', here: true }
+        : { href: hrefFor('folder', segs.slice(0, i + 1).join('/')), label: name, here: last };
+    });
+    if (subs.length > MAX_SUBFOLDERS) {
+      // Fold the upper subfolders into one back button that goes to the nearest hidden one.
+      const hidden = subs.slice(0, subs.length - (MAX_SUBFOLDERS - 1));
+      const target = hidden[hidden.length - 1];
+      items.push({ href: target.href, icon: 'back', title: target.label, cls: 'icon-only' }, ...subs.slice(-(MAX_SUBFOLDERS - 1)));
+    } else items.push(...subs);
+  }
+  // Phones: Home, a back button to the folder above, and the current page.
+  const last = items.length - 1;
+  items.forEach((it, i) => { if (i > 0 && i < last) it.cls = (it.cls ? it.cls + ' ' : '') + 'wide'; });
+  if (items.length > 2) {
+    const up = route.kind === 'list' || route.path ? hrefFor('folder', dirOf(route.path)) : '#home';
+    items.splice(1, 0, { href: up, icon: 'back', title: T.back, cls: 'icon-only narrow' });
+  }
+  const parts = [];
+  items.forEach((it, i) => {
+    // A separator is hidden together with the button after it.
+    const screenOnly = ((it.cls || '').match(/\b(wide|narrow)\b/) || [''])[0];
+    if (i > 0) parts.push(el('span', { class: 'sep ' + screenOnly, 'aria-hidden': 'true' }, '›'));
+    // Where you are is plain text, so only the places you can go to look like buttons.
+    parts.push(el(it.here ? 'span' : 'a', {
+      class: 'crumb' + (it.here ? ' here' : '') + (it.cls ? ' ' + it.cls : ''), href: it.here ? null : it.href,
+      title: it.title || it.label, 'aria-label': it.label ? null : it.title, 'aria-current': it.here ? 'page' : null,
+    }, it.icon ? icon(it.icon) : null, it.label ? el('span', { class: 'lbl', text: it.label }) : null));
+  });
+  $('crumbbar').replaceChildren(...parts);
+}
+
+function head({ title, coverUrl, sub, tracks, resume }) {
+  let actions = null;
+  if (resume) {
+    actions = el('div', { class: 'actions' },
+      el('button', { class: 'btn primary big', type: 'button', onclick: () => playList(tracks, resume.index, false, resume.time) }, icon('play'), T.continue),
+      el('button', { class: 'btn big', type: 'button', onclick: () => playList(tracks, 0) }, icon('prev'), T.startOver));
+  } else if (tracks.some(t => !t.missing)) {
+    actions = el('div', { class: 'actions' },
+      el('button', { class: 'btn primary big', type: 'button', onclick: () => playList(tracks, 0) }, icon('play'), T.playAll),
+      isBooks() ? null : el('button', { class: 'btn big', type: 'button', onclick: () => playList(tracks, 0, true) }, icon('shuffle'), T.shuffle));
+  }
+  return el('section', { class: 'head' },
+    coverUrl ? el('img', { class: 'cover', src: coverUrl, alt: '' }) : null,
+    el('div', { class: 'meta' },
+      el('h1', { text: title }),
+      sub ? el('p', { class: 'sub', text: sub }) : null,
+      actions,
+    ),
+  );
+}
+
+// A folder without its own picture borrows its subfolders' pictures, so an artist
+// shows their albums. Looks at the first 12 subfolders on each level.
+async function findCovers(path, want, depth) {
+  const own = await getCover(path);
+  if (own) return [own];
+  if (!depth) return [];
+  const subs = [];
+  for await (const [name, h] of (await getDir(path)).entries()) {
+    if (h.kind === 'directory' && !name.startsWith('.') && !name.startsWith('$')) subs.push(name);
+  }
+  subs.sort(collator.compare);
+  const found = [];
+  for (const name of subs.slice(0, 12)) {
+    found.push(...await findCovers(join(path, name), 1, depth - 1).catch(() => []));
+    if (found.length >= want) break;
+  }
+  return found;
+}
+
+const coverObserver = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    coverObserver.unobserve(e.target);
+    const art = e.target;
+    findCovers(art.dataset.path, 4, COVER_DEPTH).catch(() => []).then(urls => {
+      // Four or more: a 2×2 collage. Fewer: the first one fills the tile.
+      if (urls.length >= 4) art.append(el('div', { class: 'collage' }, urls.slice(0, 4).map(src => el('img', { src, alt: '' }))));
+      else if (urls.length) art.append(el('img', { src: urls[0], alt: '' }));
+    });
+  }
+}, { rootMargin: '400px' });
+
+function folderTile(path, name) {
+  const art = el('div', { class: 'art', style: `--h:${hueOf(name)}`, 'data-path': path },
+    el('span', { class: 'letter', text: (name.match(/\p{L}|\p{N}/u) || ['♪'])[0].toUpperCase() }));
+  coverObserver.observe(art);
+  return el('a', { class: 'tile', href: hrefFor('folder', path) }, art, el('div', { class: 'name', text: name }),
+    isBooks() && getBookPlace(path) ? el('span', { class: 'badge' }, icon('play'), T.started) : null);
+}
+function listTile(path, name) {
+  return el('a', { class: 'tile', href: hrefFor('list', path) },
+    el('div', { class: 'art', style: `--h:${hueOf(name)}` }, icon('list')),
+    el('div', { class: 'name', text: baseName(name) }));
+}
+
+function songRow(t, i, tracks, showNumber, showAlbum) {
+  const sub = el('div', { class: 'a' });
+  const title = el('div', { class: 't' });
+  const no = el('span', { class: 'no' });
+  const row = el('button', { class: 'row', type: 'button', 'data-path': t.path, onclick: () => { if (!t.missing) playList(tracks, i); } },
+    no, el('span', { class: 'eq' }, icon('volume')), el('span', { class: 'txt' }, title, sub));
+  row.fill = () => {
+    title.textContent = titleOf(t);
+    const bits = [artistOf(t)];
+    if (showAlbum && t.tags && t.tags.album) bits.push(t.tags.album);
+    sub.textContent = t.missing ? T.missing : bits.filter(Boolean).join(' · ');
+    no.textContent = showNumber ? (toNum(t.tags && t.tags.track) || '') : i + 1;
+    row.classList.toggle('missing', !!t.missing);
+  };
+  row.fill();
+  return row;
+}
+
+async function folderView(path, isCurrent) {
+  const dir = await getDir(path);
+  const { dirs, tracks, lists } = await listDir(dir, path);
+  await loadTags(tracks);
+  if (!isCurrent()) return null;
+  tracks.sort((a, b) =>
+    (toNum(a.tags?.disc) || 1) - (toNum(b.tags?.disc) || 1) ||
+    (toNum(a.tags?.track) ?? 1e9) - (toNum(b.tags?.track) ?? 1e9) ||
+    collator.compare(a.name, b.name));
+  const playable = tracks.filter(t => !t.missing);
+  const coverUrl = playable.length ? await getCover(path) : null;
+  const title = path ? path.slice(path.lastIndexOf('/') + 1) : root.name;
+  let resume = null, sub = playable.length ? T.songCount(playable.length) : '';
+  const place = isBooks() && getBookPlace(path);
+  const placeIndex = place ? playable.findIndex(t => t.path === place.path) : -1;
+  if (placeIndex >= 0) {
+    resume = { index: placeIndex, time: Math.max(0, place.time - RESUME_REWIND) };
+    sub = T.stoppedAt(titleOf(playable[placeIndex]), fmtTime(place.time));
+  }
+  const wrap = el('div', {}, head({ title, coverUrl, sub, tracks: playable, resume }));
+  if (dirs.length) wrap.append(el('h2', { text: T.folders }), el('div', { class: 'grid' }, dirs.map(n => folderTile(join(path, n), n))));
+  if (lists.length) wrap.append(el('h2', { text: T.playlists }), el('div', { class: 'grid' }, lists.map(n => listTile(join(path, n), n))));
+  if (playable.length) {
+    if (dirs.length || lists.length) wrap.append(el('h2', { text: T.songs }));
+    wrap.append(el('div', { class: 'songs' }, playable.map((t, i) => songRow(t, i, playable, true, false))));
+  }
+  if (!dirs.length && !lists.length && !playable.length) wrap.append(el('p', { class: 'empty', text: T.empty }));
+  return wrap;
+}
+
+async function playlistView(path, isCurrent) {
+  const tracks = await readPlaylist(path);
+  if (!isCurrent()) return null;
+  const rows = tracks.map((t, i) => songRow(t, i, tracks, false, true));
+  const wrap = el('div', {},
+    head({ title: baseName(path.slice(path.lastIndexOf('/') + 1)), sub: T.songCount(tracks.filter(t => !t.missing).length), tracks }),
+    el('div', { class: 'songs' }, rows));
+  // Song details fill in as they are read, so long lists appear right away.
+  const count = () => T.songCount(tracks.filter(t => !t.missing).length);
+  loadTags(tracks.filter(t => !t.missing), t => { if (isCurrent()) rows[tracks.indexOf(t)].fill(); })
+    .then(() => { const sub = wrap.querySelector('.head .sub'); if (sub) sub.textContent = count(); });
+  return wrap;
+}
+
+let renderGen = 0, shownHash = null;
+const scrollMemory = new Map();
+async function render() {
+  if (shownHash !== null) scrollMemory.set(shownHash, scrollY);
+  const hash = location.hash || '#home';
+  const gen = ++renderGen;
+  const isCurrent = () => gen === renderGen;
+  dirCache = new Map();
+  coverCache = new Map();
+  const route = parseHash();
+  $('top').hidden = false;
+  updatePathBar(route);
+  const slow = setTimeout(() => { if (isCurrent()) view.replaceChildren(el('p', { class: 'loading', text: T.loading })); }, 250);
+  let content;
+  try {
+    content = route.kind === 'home' ? homeView()
+      : route.kind === 'list' ? await playlistView(route.path, isCurrent)
+      : await folderView(route.path, isCurrent);
+  } catch (e) {
+    console.error(e);
+    content = el('div', { class: 'center' }, el('p', { text: T.notFound }),
+      el('a', { class: 'btn primary big', href: '#home' }, icon('home'), T.home));
+  }
+  clearTimeout(slow);
+  if (!isCurrent() || !content) return;
+  view.replaceChildren(content);
+  shownHash = hash;
+  markPlaying();
+  scrollTo(0, scrollMemory.get(hash) || 0);
+}
+addEventListener('hashchange', render);
+
+/* ---------- Start screens ---------- */
+function screen(title, text, ...buttons) {
+  $('top').hidden = true;
+  view.replaceChildren(el('div', { class: 'center' },
+    el('img', { class: 'logo', src: 'icons/icon.svg', alt: '' }),
+    el('h1', { text: title }), text ? el('p', { text }) : null, ...buttons));
+}
+
+// Several folders can be saved (say, music and audiobooks). Each one keeps its own place.
+let folders = [];   // [{ id, handle }]
+let current = null; // the folder being shown
+const CURRENT_KEY = 'fmp-current';
+
+const saveFolders = () => db.set('kv', 'folders', folders).catch(() => {});
+
+async function loadFolders() {
+  try { folders = (await db.get('kv', 'folders')) || []; } catch { folders = []; }
+}
+
+async function hasPermission(f, ask) {
+  try {
+    if (await f.handle.queryPermission({ mode: 'read' }) === 'granted') return true;
+    return ask && await f.handle.requestPermission({ mode: 'read' }) === 'granted';
+  } catch { return false; }
+}
+
+async function start() {
+  if (!('showDirectoryPicker' in window)) return screen(T.unsupportedTitle, T.unsupportedText);
+  await loadFolders();
+  if (!folders.length) return showWelcome();
+  let lastId = null;
+  try { lastId = localStorage.getItem(CURRENT_KEY); } catch { /* none */ }
+  const last = folders.find(f => f.id === lastId) || folders[0];
+  // If the browser still allows it, get the last folder's player ready; otherwise
+  // the overview waits for a click, which the browser needs before asking again.
+  if (await hasPermission(last, false)) activate(last);
+  render();
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch { /* optional */ }
+}
+function showWelcome() {
+  screen(T.welcomeTitle, T.welcomeText,
+    el('button', { class: 'btn primary big', type: 'button', onclick: addFolder }, icon('folder'), T.chooseFolder));
+}
+
+// Makes a folder the current one and brings back where you stopped in it.
+function activate(f) {
+  saveTime();
+  stopPlayer();
+  current = f;
+  root = f.handle;
+  try { localStorage.setItem(CURRENT_KEY, f.id); } catch { /* fine */ }
+  scrollMemory.clear();
+  restoreSession();
+}
+
+// Shows a folder's contents, asking the browser for permission first if needed.
+async function openFolder(f, ask) {
+  if (!await hasPermission(f, ask)) { if (ask) toast(T.permissionDenied); return; }
+  if ($('folders').open) $('folders').close();
+  if (current !== f) activate(f);
+  if (location.hash === '#/') render(); else location.hash = '#/';
+}
+
+function homeView() {
+  const tiles = folders.map(f => el('button', { class: 'tile', type: 'button', onclick: () => openFolder(f, true) },
+    el('div', { class: 'art', style: `--h:${hueOf(f.handle.name)}` }, icon(f.audiobooks ? 'book' : 'note')),
+    el('div', { class: 'name', text: f.handle.name })));
+  tiles.push(el('button', { class: 'tile add', type: 'button', onclick: addFolder },
+    el('div', { class: 'art' }, icon('add')), el('div', { class: 'name', text: T.addFolder })));
+  return el('div', {},
+    el('section', { class: 'head' }, el('div', { class: 'meta' }, el('h1', { text: T.homeTitle }))),
+    el('div', { class: 'grid' }, tiles));
+}
+
+async function addFolder() {
+  let handle;
+  try { handle = await showDirectoryPicker({ id: 'music', mode: 'read' }); } catch { return; }
+  let f = null;
+  for (const x of folders) if (await x.handle.isSameEntry(handle).catch(() => false)) { f = x; break; }
+  if (!f) {
+    f = { id: crypto.randomUUID(), handle, audiobooks: AUDIOBOOK_NAMES.test(handle.name) };
+    folders.push(f);
+    await saveFolders();
+  }
+  openFolder(f, true);
+}
+
+async function removeFolder(f) {
+  if (!confirm(T.removeConfirm(f.handle.name))) return;
+  folders = folders.filter(x => x !== f);
+  await saveFolders();
+  try {
+    for (const k of ['queue', 'index', 'time']) localStorage.removeItem(`fmp-${k}:${f.id}`);
+    for (const k of Object.keys(localStorage)) if (k.startsWith(`fmp-book:${f.id}:`)) localStorage.removeItem(k);
+  } catch { /* fine */ }
+  db.clearPrefix('tags', f.id + ':').catch(() => {});
+  if (f === current) {
+    stopPlayer();
+    current = null;
+    root = null;
+  }
+  if (!folders.length) { $('folders').close(); return showWelcome(); }
+  showFolders();
+  if (location.hash === '#home') render(); else location.hash = '#home';
+}
+
+function showFolders() {
+  $('folderList').replaceChildren(...folders.map(f => el('div', { class: 'fitem' },
+    el('div', { class: 'frow' },
+      el('button', { class: 'btn big' + (f === current ? ' primary' : ''), type: 'button', onclick: () => openFolder(f, true) },
+        icon('folder'), el('span', { class: 'nm', text: f.handle.name })),
+      el('button', { class: 'iconbtn', type: 'button', title: T.remove, 'aria-label': T.remove + ': ' + f.handle.name, onclick: () => removeFolder(f) }, icon('close'))),
+    el('label', { class: 'check' },
+      el('input', { type: 'checkbox', checked: !!f.audiobooks, onchange: e => setAudiobooks(f, e.target.checked) }),
+      T.audiobooks))));
+  if (!$('folders').open) $('folders').showModal();
+}
+
+async function setAudiobooks(f, on) {
+  f.audiobooks = on;
+  await saveFolders();
+  if (f === current) render();
+}
+
+/* ---------- Audiobooks ---------- */
+// In an audiobook folder, every folder with songs in it is a book and keeps its own place.
+const isBooks = () => !!(current && current.audiobooks);
+const bookKey = dir => `fmp-book:${current.id}:${dir}`;
+function getBookPlace(dir) {
+  try { return JSON.parse(localStorage.getItem(bookKey(dir)) || 'null'); } catch { return null; }
+}
+
+/* ---------- Player ---------- */
+const audio = new Audio();
+const P = { queue: [], index: -1, url: null, loadGen: 0, failStreak: 0, seeking: false };
+const VOLUME_KEY = 'fmp-volume';
+// Where you stopped is saved per music folder.
+const placeKey = name => `fmp-${name}:${current ? current.id : ''}`;
+function saveTime(seconds) {
+  if (P.index < 0 || !audio.getAttribute('src')) return;
+  const time = Math.floor(seconds ?? audio.currentTime);
+  try {
+    localStorage.setItem(placeKey('time'), String(time));
+    if (isBooks()) {
+      const t = P.queue[P.index];
+      localStorage.setItem(bookKey(dirOf(t.path)), JSON.stringify({ path: t.path, time }));
+    }
+  } catch { /* fine */ }
+}
+
+function playList(tracks, startIndex, shuffle, startAt) {
+  const start = tracks[startIndex];
+  let q = tracks.filter(t => !t.missing).map(t => ({ path: t.path, name: t.name, extTitle: t.extTitle, tags: t.tags }));
+  let i = Math.max(0, q.findIndex(t => t.path === start.path));
+  if (shuffle) {
+    for (let k = q.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [q[k], q[j]] = [q[j], q[k]]; }
+    i = 0;
+  }
+  P.queue = q;
+  P.failStreak = 0;
+  try { localStorage.setItem(placeKey('queue'), JSON.stringify(q.map(t => t.path))); } catch { /* fine */ }
+  loadTrack(i, true, startAt);
+}
+
+async function loadTrack(i, autoplay, startAt, quiet) {
+  if (i < 0 || i >= P.queue.length) return;
+  const gen = ++P.loadGen;
+  P.index = i;
+  const t = P.queue[i];
+  let file;
+  try { file = await getFile(t.path); } catch {
+    if (gen !== P.loadGen) return;
+    if (quiet) return stopPlayer();
+    return skipBroken(t, autoplay);
+  }
+  if (gen !== P.loadGen) return;
+  if (P.url) URL.revokeObjectURL(P.url);
+  P.url = URL.createObjectURL(file);
+  audio.src = P.url;
+  if (startAt) audio.addEventListener('loadedmetadata', () => { audio.currentTime = startAt; }, { once: true });
+  if (autoplay) audio.play().catch(() => {});
+  try { localStorage.setItem(placeKey('index'), String(i)); } catch { /* fine */ }
+  saveTime(startAt || 0);
+  if (!t.tags) t.tags = await getTags(t).catch(() => ({}));
+  if (gen !== P.loadGen) return;
+  showNowPlaying(t);
+  markPlaying();
+}
+
+function skipBroken(t, autoplay) {
+  toast(T.cantPlay(titleOf(t)));
+  if (++P.failStreak > 5 || P.index + 1 >= P.queue.length) { audio.pause(); return; }
+  loadTrack(P.index + 1, autoplay);
+}
+
+function stopPlayer() {
+  P.loadGen++;
+  audio.pause();
+  audio.removeAttribute('src');
+  audio.load();
+  if (P.url) URL.revokeObjectURL(P.url);
+  P.url = null; P.queue = []; P.index = -1;
+  $('player').hidden = true;
+  $('nowNext').textContent = '';
+  if ($('queue').open) $('queue').close();
+  document.body.classList.remove('has-player');
+  document.title = APP_NAME;
+  if ('mediaSession' in navigator) navigator.mediaSession.metadata = null;
+  markPlaying();
+}
+
+async function showNowPlaying(t) {
+  $('player').hidden = false;
+  document.body.classList.add('has-player');
+  $('nowTitle').textContent = titleOf(t);
+  $('nowArtist').textContent = [artistOf(t), t.tags && t.tags.album].filter(Boolean).join(' · ');
+  document.title = titleOf(t) + ' – ' + APP_NAME;
+  showUpNext();
+  if ($('queue').open) markQueue(true);
+  const url = await getCover(dirOf(t.path));
+  if (P.queue[P.index] !== t) return;
+  $('nowImg').hidden = !url;
+  $('nowPh').hidden = !!url;
+  if (url) $('nowImg').src = url;
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: titleOf(t), artist: artistOf(t), album: (t.tags && t.tags.album) || '',
+      artwork: url ? [{ src: url }] : [],
+    });
+  }
+}
+
+// The small "Next: …" line in the player.
+async function showUpNext() {
+  const next = P.queue[P.index + 1];
+  $('nowNext').textContent = next ? T.upNext(titleOf(next)) : '';
+  if (next && !next.tags) {
+    next.tags = await getTags(next).catch(() => ({}));
+    if (P.queue[P.index + 1] === next) $('nowNext').textContent = T.upNext(titleOf(next));
+  }
+}
+
+// The "Up next" panel: every song in playing order; tapping one jumps to it.
+function showQueue() {
+  const rows = P.queue.map((t, i) => {
+    const title = el('div', { class: 't', text: titleOf(t) });
+    const sub = el('div', { class: 'a', text: artistOf(t) });
+    const row = el('button', { class: 'row', type: 'button', onclick: () => loadTrack(i, true) },
+      el('span', { class: 'no', text: i + 1 }), el('span', { class: 'eq' }, icon('volume')), el('span', { class: 'txt' }, title, sub));
+    row.fill = () => { title.textContent = titleOf(t); sub.textContent = artistOf(t); };
+    return row;
+  });
+  $('queueList').replaceChildren(...rows);
+  $('queue').showModal();
+  markQueue(true);
+  // Songs from a restored session may not have their details yet.
+  const missing = P.queue.filter(t => !t.tags);
+  loadTags(missing, t => { const i = P.queue.indexOf(t); if (rows[i]) rows[i].fill(); });
+}
+function markQueue(scroll) {
+  const rows = $('queueList').children;
+  for (let i = 0; i < rows.length; i++) {
+    const on = i === P.index;
+    rows[i].classList.toggle('playing', on);
+    if (on) rows[i].setAttribute('aria-current', 'true'); else rows[i].removeAttribute('aria-current');
+  }
+  if (scroll && rows[P.index]) rows[P.index].scrollIntoView({ block: 'center' });
+}
+
+function markPlaying() {
+  const cur = P.queue[P.index] ? P.queue[P.index].path : null;
+  for (const r of view.querySelectorAll('.row[data-path]')) {
+    const on = r.dataset.path === cur;
+    r.classList.toggle('playing', on);
+    if (on) r.setAttribute('aria-current', 'true'); else r.removeAttribute('aria-current');
+  }
+}
+
+function togglePlay() {
+  if (P.index < 0) return;
+  if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+}
+function next() { if (P.index + 1 < P.queue.length) loadTrack(P.index + 1, true); }
+function prev() {
+  if (audio.currentTime > 3 || P.index === 0) { audio.currentTime = 0; audio.play().catch(() => {}); }
+  else loadTrack(P.index - 1, true);
+}
+
+async function restoreSession() {
+  try {
+    const queue = JSON.parse(localStorage.getItem(placeKey('queue')) || 'null');
+    if (!Array.isArray(queue) || !queue.length) return;
+    const index = Math.min(+localStorage.getItem(placeKey('index')) || 0, queue.length - 1);
+    P.queue = queue.map(path => ({ path, name: path.slice(path.lastIndexOf('/') + 1) }));
+    await loadTrack(index, false, +localStorage.getItem(placeKey('time')) || 0, true);
+  } catch { /* start fresh */ }
+}
+
+function setRangeFill(r) {
+  const max = +r.max || 0;
+  r.style.setProperty('--p', (max ? (+r.value / max) * 100 : 0) + '%');
+}
+
+const seek = $('seek');
+let lastSaved = 0;
+audio.addEventListener('timeupdate', () => {
+  if (!P.seeking) { seek.value = audio.currentTime; setRangeFill(seek); }
+  $('tCur').textContent = fmtTime(audio.currentTime);
+  if (Math.abs(audio.currentTime - lastSaved) > 5) {
+    lastSaved = audio.currentTime;
+    saveTime();
+  }
+});
+audio.addEventListener('durationchange', () => {
+  seek.max = Number.isFinite(audio.duration) ? audio.duration : 0;
+  $('tDur').textContent = fmtTime(audio.duration);
+  setRangeFill(seek);
+});
+audio.addEventListener('play', () => {
+  $('playIcon').setAttribute('href', '#i-pause');
+  $('playBtn').setAttribute('aria-label', T.pause);
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+});
+audio.addEventListener('pause', () => {
+  $('playIcon').setAttribute('href', '#i-play');
+  $('playBtn').setAttribute('aria-label', T.play);
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  if (!audio.ended) saveTime();
+});
+audio.addEventListener('playing', () => { P.failStreak = 0; });
+addEventListener('pagehide', () => {
+  if (!audio.ended) saveTime();
+});
+audio.addEventListener('ended', () => {
+  if (P.index + 1 < P.queue.length) return loadTrack(P.index + 1, true);
+  saveTime(0);
+  // Finished the last chapter: the book starts from the beginning next time.
+  if (isBooks()) try { localStorage.removeItem(bookKey(dirOf(P.queue[P.index].path))); } catch { /* fine */ }
+});
+audio.addEventListener('error', () => {
+  if (P.index >= 0 && audio.getAttribute('src')) skipBroken(P.queue[P.index], true);
+});
+
+seek.addEventListener('input', () => { P.seeking = true; setRangeFill(seek); $('tCur').textContent = fmtTime(+seek.value); });
+seek.addEventListener('change', () => { audio.currentTime = +seek.value; P.seeking = false; });
+
+const vol = $('volume');
+try { const v = localStorage.getItem(VOLUME_KEY); if (v !== null) vol.value = v; } catch { /* fine */ }
+audio.volume = +vol.value;
+setRangeFill(vol);
+vol.addEventListener('input', () => {
+  audio.volume = +vol.value;
+  setRangeFill(vol);
+  try { localStorage.setItem(VOLUME_KEY, vol.value); } catch { /* fine */ }
+});
+
+$('playBtn').addEventListener('click', togglePlay);
+$('nextBtn').addEventListener('click', next);
+$('prevBtn').addEventListener('click', prev);
+$('queueBtn').addEventListener('click', showQueue);
+$('closeQueueBtn').addEventListener('click', () => $('queue').close());
+$('queue').addEventListener('click', e => { if (e.target === $('queue')) $('queue').close(); });
+$('now').addEventListener('click', () => { const t = P.queue[P.index]; if (t) location.hash = hrefFor('folder', dirOf(t.path)); });
+
+if ('mediaSession' in navigator) {
+  const ms = navigator.mediaSession;
+  ms.setActionHandler('play', () => audio.play().catch(() => {}));
+  ms.setActionHandler('pause', () => audio.pause());
+  ms.setActionHandler('previoustrack', prev);
+  ms.setActionHandler('nexttrack', next);
+  try { ms.setActionHandler('seekto', d => { audio.currentTime = d.seekTime; }); } catch { /* older browsers */ }
+}
+
+addEventListener('keydown', e => {
+  if (e.code !== 'Space' || e.target.matches('input, textarea') || $('menu').open || $('folders').open || $('queue').open || P.index < 0) return;
+  e.preventDefault();
+  togglePlay();
+});
+
+/* ---------- Menu ---------- */
+$('menuBtn').addEventListener('click', () => {
+  $('menuFolder').textContent = root ? T.menuFolder(root.name) : '';
+  $('menu').showModal();
+});
+$('closeMenuBtn').addEventListener('click', () => $('menu').close());
+$('manageFoldersBtn').addEventListener('click', () => { $('menu').close(); showFolders(); });
+$('addFolderBtn').addEventListener('click', addFolder);
+$('closeFoldersBtn').addEventListener('click', () => $('folders').close());
+$('clearCacheBtn').addEventListener('click', async () => {
+  try { await db.clear('tags'); } catch { /* fine */ }
+  tagMem.clear();
+  $('menu').close();
+  toast(T.cacheCleared);
+  render();
+});
+
+start();
+
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(function () { /* the app still works online */ });
+  });
+}
+</script>
+</body>
+</html>
