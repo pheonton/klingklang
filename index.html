@@ -150,6 +150,8 @@ dialog h2{margin:0 0 6px}
 dialog p{color:var(--muted);margin:0 0 18px}
 dialog .stack{display:flex;flex-direction:column;gap:10px}
 button.tile{border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;width:calc(100% + 16px)}
+/* Tiles sit at the top of their row; a button would otherwise centre its picture in the stretched row. */
+.grid > .tile{align-self:start}
 .tile.add .art{background:none;border:3px dashed var(--line);box-shadow:none;color:var(--muted)}
 .fitem{display:flex;flex-direction:column;gap:6px}
 .frow{display:flex;gap:8px;align-items:center}
