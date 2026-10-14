@@ -55,6 +55,15 @@ remembers its own chapter and position:
 
 A book split into subfolders (`CD 1`, `CD 2`) counts as one book per subfolder.
 
+### Chapters
+
+M4B (and M4A) files with chapter marks are shown chapter by chapter: the book's
+page lists the chapters with their length, ⏮ / ⏭ jump between chapters, the
+player shows the chapter title with book and author below, and the progress
+bar covers the current chapter. Both kinds of chapter marks are read (Apple's
+chapter track and Nero's `chpl` list). This works in every folder, not only
+audiobook folders.
+
 ## What it reads
 
 - **Music:** only formats the browser plays by itself: MP3, M4A/AAC, FLAC,

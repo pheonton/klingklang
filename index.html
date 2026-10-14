@@ -286,6 +286,7 @@ const STRINGS = {
     play: 'Play', pause: 'Pause', prev: 'Previous song', next: 'Next song', volume: 'Volume',
     showAlbum: 'Show the folder of this song',
     upNext: t => `Next: ${t}`, upNextTitle: 'Up next',
+    chapterN: n => `Chapter ${n}`, chapterCount: n => n === 1 ? '1 chapter' : `${n} chapters`,
     cantPlay: n => `Couldn’t play “${n}”. Skipping it.`,
     permissionDenied: 'Without permission I can’t read your music.',
     menuFolder: n => `Music folder: “${n}”. Folders are read fresh each time you open them, so new songs show up right away.`,
@@ -311,6 +312,7 @@ const STRINGS = {
     play: 'Abspielen', pause: 'Pause', prev: 'Vorheriges Lied', next: 'Nächstes Lied', volume: 'Lautstärke',
     showAlbum: 'Ordner dieses Liedes zeigen',
     upNext: t => `Als Nächstes: ${t}`, upNextTitle: 'Als Nächstes',
+    chapterN: n => `Kapitel ${n}`, chapterCount: n => `${n} Kapitel`,
     cantPlay: n => `„${n}“ lässt sich nicht abspielen. Weiter zum nächsten.`,
     permissionDenied: 'Ohne Erlaubnis kann ich deine Musik nicht lesen.',
     menuFolder: n => `Musikordner: „${n}“. Ordner werden bei jedem Öffnen neu gelesen, neue Lieder erscheinen also sofort.`,
@@ -375,7 +377,12 @@ const baseName = name => name.replace(/\.[^.]+$/, '');
 const dirOf = path => { const i = path.lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); };
 const join = (dir, name) => dir ? dir + '/' + name : name;
 const toNum = s => { const n = parseInt(s, 10); return Number.isFinite(n) ? n : null; };
-const fmtTime = s => { if (!Number.isFinite(s)) return '0:00'; s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const fmtTime = s => {
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  s = Math.floor(s);
+  const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+};
 const hueOf = s => { let h = 0; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
 
 async function mapLimit(items, limit, fn) {
@@ -608,6 +615,106 @@ function mp4Child(d, start, end, type) {
   return null;
 }
 
+function mp4Children(d, start, end, type) {
+  const out = [];
+  let p = start;
+  while (p + 8 <= end) {
+    let len = u32(d, p), hdr = 8;
+    const t = ascii(d, p + 4, p + 8);
+    if (len === 1) { len = u32(d, p + 8) * 2 ** 32 + u32(d, p + 12); hdr = 16; } else if (len === 0) len = end - p;
+    if (len < hdr) break;
+    if (t === type) out.push([p + hdr, Math.min(p + len, end)]);
+    p += len;
+  }
+  return out;
+}
+// Follows a path of boxes, e.g. mp4Path(d, trak, 'mdia', 'minf', 'stbl').
+function mp4Path(d, box, ...types) {
+  for (const t of types) { if (!box) return null; box = mp4Child(d, box[0], box[1], t); }
+  return box;
+}
+// mvhd, mdhd and tkhd keep their fields 8 bytes further on in version 1.
+const mp4Field = (d, box, v0Offset) => u32(d, box[0] + v0Offset + (d[box[0]] === 1 ? 8 : 0));
+
+function mp4Duration(d) {
+  const b = mp4Child(d, 0, d.length, 'mvhd');
+  if (!b) return null;
+  const v1 = d[b[0]] === 1, scale = mp4Field(d, b, 12);
+  const dur = v1 ? u32(d, b[0] + 24) * 2 ** 32 + u32(d, b[0] + 28) : u32(d, b[0] + 16);
+  return scale ? dur / scale : null;
+}
+
+// Nero chapters ("chpl"): start times in 100 ns steps, at most 255 chapters.
+function mp4NeroChapters(d) {
+  const b = mp4Path(d, [0, d.length], 'udta', 'chpl');
+  if (!b) return null;
+  let p = b[0] + 4 + (d[b[0]] ? 4 : 0);
+  const n = d[p++], out = [];
+  for (let i = 0; i < n && p + 9 <= b[1]; i++) {
+    const start = (u32(d, p) * 2 ** 32 + u32(d, p + 4)) / 1e7, len = d[p + 8];
+    p += 9;
+    out.push({ t: utf8.decode(d.subarray(p, p + len)).trim(), s: start });
+    p += len;
+  }
+  return out;
+}
+
+// Apple chapters: a text track that the audio track points to with tref/chap.
+// Returns where each chapter title sits in the file and when the chapter starts.
+function mp4ChapterSamples(d) {
+  const traks = mp4Children(d, 0, d.length, 'trak');
+  let chapId = null;
+  for (const tr of traks) {
+    const c = mp4Path(d, tr, 'tref', 'chap');
+    if (c && c[1] - c[0] >= 4) { chapId = u32(d, c[0]); break; }
+  }
+  const tr = chapId !== null && traks.find(t => { const h = mp4Child(d, t[0], t[1], 'tkhd'); return h && mp4Field(d, h, 12) === chapId; });
+  const mdia = tr && mp4Child(d, tr[0], tr[1], 'mdia');
+  const mdhd = mdia && mp4Child(d, mdia[0], mdia[1], 'mdhd');
+  const stbl = mdia && mp4Path(d, mdia, 'minf', 'stbl');
+  if (!mdhd || !stbl) return null;
+  const scale = mp4Field(d, mdhd, 12);
+  const box = t => mp4Child(d, stbl[0], stbl[1], t);
+  const stts = box('stts'), stsz = box('stsz'), stsc = box('stsc'), stco = box('stco'), co64 = box('co64');
+  if (!scale || !stts || !stsz || !stsc || !(stco || co64)) return null;
+  const starts = [];
+  let time = 0;
+  for (let i = 0, n = u32(d, stts[0] + 4), p = stts[0] + 8; i < n && starts.length < 5000; i++, p += 8) {
+    for (let k = 0, c = u32(d, p); k < c && starts.length < 5000; k++) { starts.push(time / scale); time += u32(d, p + 4); }
+  }
+  const fixed = u32(d, stsz[0] + 4), count = Math.min(u32(d, stsz[0] + 8), 5000);
+  const size = i => fixed || u32(d, stsz[0] + 12 + i * 4);
+  const chunks = [];
+  if (stco) for (let i = 0, n = u32(d, stco[0] + 4); i < n; i++) chunks.push(u32(d, stco[0] + 8 + i * 4));
+  else for (let i = 0, n = u32(d, co64[0] + 4); i < n; i++) chunks.push(u32(d, co64[0] + 8 + i * 8) * 2 ** 32 + u32(d, co64[0] + 12 + i * 8));
+  const runs = [];
+  for (let i = 0, n = u32(d, stsc[0] + 4); i < n; i++) runs.push([u32(d, stsc[0] + 8 + i * 12), u32(d, stsc[0] + 12 + i * 12)]);
+  const samples = [];
+  for (let c = 0, sample = 0; c < chunks.length && sample < count; c++) {
+    let per = 0;
+    for (const [first, n] of runs) if (first <= c + 1) per = n;
+    for (let k = 0, off = chunks[c]; k < per && sample < count; k++, sample++) {
+      samples.push({ off, size: size(sample), s: starts[sample] || 0 });
+      off += size(sample);
+    }
+  }
+  return samples;
+}
+
+async function readMp4Chapters(file, d) {
+  const samples = mp4ChapterSamples(d);
+  if (!samples || samples.length < 2) return mp4NeroChapters(d);
+  const read = rangeReader(file), out = [];
+  for (const x of samples) {
+    // Each title is a 2-byte length followed by UTF-8 (or UTF-16 with a byte order mark).
+    const b = await read(x.off, x.off + Math.min(x.size, 2048));
+    const text = b.subarray(2, 2 + (b.length >= 2 ? b[0] << 8 | b[1] : 0));
+    const title = text[0] === 0xfe && text[1] === 0xff ? new TextDecoder('utf-16be').decode(text.subarray(2)) : utf8.decode(text);
+    out.push({ t: title.replace(/\0/g, '').trim(), s: Math.round(x.s * 1000) / 1000 });
+  }
+  return out;
+}
+
 const MP4_KEYS = { '©nam': 'title', '©ART': 'artist', '©alb': 'album', aART: 'albumArtist' };
 async function readMp4(file) {
   let pos = 0;
@@ -617,7 +724,15 @@ async function readMp4(file) {
     const type = ascii(h, 4, 8);
     if (len === 1) { len = u32(h, 8) * 2 ** 32 + u32(h, 12); hdr = 16; } else if (len === 0) len = file.size - pos;
     if (len < hdr) break;
-    if (type === 'moov') return readMoov(await readBytes(file, pos + hdr, pos + Math.min(len, 16 << 20)));
+    if (type === 'moov') {
+      const d = await readBytes(file, pos + hdr, pos + Math.min(len, 48 << 20));
+      const tags = readMoov(d);
+      const duration = mp4Duration(d);
+      if (duration) tags.duration = Math.round(duration);
+      const chapters = await readMp4Chapters(file, d).catch(() => null);
+      if (chapters && chapters.length > 1) tags.chapters = chapters;
+      return tags;
+    }
     pos += len;
   }
   return {};
@@ -667,6 +782,8 @@ let root = null;
 let dirCache = new Map();   // folder path -> Promise<DirectoryHandle>; emptied on every page change
 let coverCache = new Map(); // folder path -> Promise<object URL or null>
 const tagMem = new Map();   // "folder id:path|size|date" -> tags
+// Raise when readTags learns something new, so cached song details are read again.
+const TAGS_VERSION = 2;
 
 function getDir(path) {
   if (!path) return Promise.resolve(root);
@@ -710,11 +827,11 @@ async function getTags(track) {
   let tags = null;
   try {
     const c = await db.get('tags', cacheKey);
-    if (c && c.size === file.size && c.mtime === file.lastModified) tags = c.tags;
+    if (c && c.v === TAGS_VERSION && c.size === file.size && c.mtime === file.lastModified) tags = c.tags;
   } catch { /* no cache available */ }
   if (!tags) {
     tags = await readTags(file).catch(() => ({}));
-    try { await db.set('tags', cacheKey, { size: file.size, mtime: file.lastModified, tags }); } catch { /* fine without cache */ }
+    try { await db.set('tags', cacheKey, { v: TAGS_VERSION, size: file.size, mtime: file.lastModified, tags }); } catch { /* fine without cache */ }
   }
   tagMem.set(memKey, tags);
   return tags;
@@ -728,6 +845,21 @@ async function loadTags(tracks, onEach) {
 
 const titleOf = t => (t.tags && t.tags.title) || t.extTitle || baseName(t.name);
 const artistOf = t => (t.tags && (t.tags.artist || t.tags.albumArtist)) || '';
+
+// Chapters inside one file (M4B audiobooks): [{ t: title, s: start in seconds }].
+const chaptersOf = t => (t && t.tags && t.tags.chapters) || null;
+function chapterAt(t, time) {
+  const ch = chaptersOf(t);
+  if (!ch) return -1;
+  let i = 0;
+  while (i + 1 < ch.length && ch[i + 1].s <= time + 0.25) i++;
+  return i;
+}
+function chapterEnd(t, i) {
+  const ch = chaptersOf(t);
+  return i + 1 < ch.length ? ch[i + 1].s : (t.tags.duration || ch[i].s);
+}
+const chapterTitle = (t, i) => chaptersOf(t)[i].t || T.chapterN(i + 1);
 
 async function listDir(dir, path) {
   const dirs = [], tracks = [], lists = [];
@@ -911,6 +1043,13 @@ function songRow(t, i, tracks, showNumber, showAlbum) {
   return row;
 }
 
+function chapterRow(t, i, k, tracks) {
+  const length = chapterEnd(t, k) - chaptersOf(t)[k].s;
+  return el('button', { class: 'row', type: 'button', 'data-path': t.path, 'data-chapter': k, onclick: () => playChapter(tracks, i, k) },
+    el('span', { class: 'no', text: k + 1 }), el('span', { class: 'eq' }, icon('volume')),
+    el('span', { class: 'txt' }, el('div', { class: 't', text: chapterTitle(t, k) }), el('div', { class: 'a', text: length > 0 ? fmtTime(length) : '' })));
+}
+
 async function folderView(path, isCurrent) {
   const dir = await getDir(path);
   const { dirs, tracks, lists } = await listDir(dir, path);
@@ -923,19 +1062,25 @@ async function folderView(path, isCurrent) {
   const playable = tracks.filter(t => !t.missing);
   const coverUrl = playable.length ? await getCover(path) : null;
   const title = path ? path.slice(path.lastIndexOf('/') + 1) : root.name;
-  let resume = null, sub = playable.length ? T.songCount(playable.length) : '';
+  const chapterTotal = playable.reduce((n, t) => n + (chaptersOf(t) ? chaptersOf(t).length : 0), 0);
+  let resume = null;
+  let sub = !playable.length ? '' : playable.every(chaptersOf) ? T.chapterCount(chapterTotal) : T.songCount(playable.length);
   const place = isBooks() && getBookPlace(path);
   const placeIndex = place ? playable.findIndex(t => t.path === place.path) : -1;
   if (placeIndex >= 0) {
+    const t = playable[placeIndex], k = chapterAt(t, place.time);
     resume = { index: placeIndex, time: Math.max(0, place.time - RESUME_REWIND) };
-    sub = T.stoppedAt(titleOf(playable[placeIndex]), fmtTime(place.time));
+    sub = k >= 0 ? T.stoppedAt(chapterTitle(t, k), fmtTime(place.time - chaptersOf(t)[k].s)) : T.stoppedAt(titleOf(t), fmtTime(place.time));
   }
   const wrap = el('div', {}, head({ title, coverUrl, sub, tracks: playable, resume }));
   if (dirs.length) wrap.append(el('h2', { text: T.folders }), el('div', { class: 'grid' }, dirs.map(n => folderTile(join(path, n), n))));
   if (lists.length) wrap.append(el('h2', { text: T.playlists }), el('div', { class: 'grid' }, lists.map(n => listTile(join(path, n), n))));
   if (playable.length) {
     if (dirs.length || lists.length) wrap.append(el('h2', { text: T.songs }));
-    wrap.append(el('div', { class: 'songs' }, playable.map((t, i) => songRow(t, i, playable, true, false))));
+    // A file with chapters is listed chapter by chapter.
+    wrap.append(el('div', { class: 'songs' }, playable.flatMap((t, i) => chaptersOf(t)
+      ? chaptersOf(t).map((c, k) => chapterRow(t, i, k, playable))
+      : [songRow(t, i, playable, true, false)])));
   }
   if (!dirs.length && !lists.length && !playable.length) wrap.append(el('p', { class: 'empty', text: T.empty }));
   return wrap;
@@ -1121,7 +1266,7 @@ function getBookPlace(dir) {
 
 /* ---------- Player ---------- */
 const audio = new Audio();
-const P = { queue: [], index: -1, url: null, loadGen: 0, failStreak: 0, seeking: false };
+const P = { queue: [], index: -1, chapter: -1, url: null, coverUrl: null, loadGen: 0, failStreak: 0, seeking: false };
 const VOLUME_KEY = 'fmp-volume';
 // Where you stopped is saved per music folder.
 const placeKey = name => `fmp-${name}:${current ? current.id : ''}`;
@@ -1155,6 +1300,7 @@ async function loadTrack(i, autoplay, startAt, quiet) {
   if (i < 0 || i >= P.queue.length) return;
   const gen = ++P.loadGen;
   P.index = i;
+  P.chapter = -1;
   const t = P.queue[i];
   let file;
   try { file = await getFile(t.path); } catch {
@@ -1172,6 +1318,8 @@ async function loadTrack(i, autoplay, startAt, quiet) {
   saveTime(startAt || 0);
   if (!t.tags) t.tags = await getTags(t).catch(() => ({}));
   if (gen !== P.loadGen) return;
+  P.chapter = chapterAt(t, startAt || 0);
+  updateSeekRange();
   showNowPlaying(t);
   markPlaying();
 }
@@ -1188,7 +1336,8 @@ function stopPlayer() {
   audio.removeAttribute('src');
   audio.load();
   if (P.url) URL.revokeObjectURL(P.url);
-  P.url = null; P.queue = []; P.index = -1;
+  P.url = null; P.coverUrl = null; P.queue = []; P.index = -1; P.chapter = -1;
+  seek.min = 0;
   $('player').hidden = true;
   $('nowNext').textContent = '';
   if ($('queue').open) $('queue').close();
@@ -1201,26 +1350,55 @@ function stopPlayer() {
 async function showNowPlaying(t) {
   $('player').hidden = false;
   document.body.classList.add('has-player');
-  $('nowTitle').textContent = titleOf(t);
-  $('nowArtist').textContent = [artistOf(t), t.tags && t.tags.album].filter(Boolean).join(' · ');
-  document.title = titleOf(t) + ' – ' + APP_NAME;
-  showUpNext();
+  updateNowText(t);
   if ($('queue').open) markQueue(true);
   const url = await getCover(dirOf(t.path));
   if (P.queue[P.index] !== t) return;
+  P.coverUrl = url;
   $('nowImg').hidden = !url;
   $('nowPh').hidden = !!url;
   if (url) $('nowImg').src = url;
-  if ('mediaSession' in navigator) {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: titleOf(t), artist: artistOf(t), album: (t.tags && t.tags.album) || '',
-      artwork: url ? [{ src: url }] : [],
-    });
-  }
+  updateMediaSession(t);
+}
+
+// In a file with chapters the player shows the chapter, with book and author below.
+function updateNowText(t) {
+  const k = P.chapter;
+  const title = k >= 0 ? chapterTitle(t, k) : titleOf(t);
+  $('nowTitle').textContent = title;
+  $('nowArtist').textContent = (k >= 0 ? [(t.tags && t.tags.album) || titleOf(t), artistOf(t)] : [artistOf(t), t.tags && t.tags.album])
+    .filter(Boolean).join(' · ');
+  document.title = title + ' – ' + APP_NAME;
+  showUpNext();
+  updateMediaSession(t);
+}
+function updateMediaSession(t) {
+  if (!('mediaSession' in navigator)) return;
+  const k = P.chapter;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: k >= 0 ? chapterTitle(t, k) : titleOf(t), artist: artistOf(t),
+    album: (t.tags && t.tags.album) || (k >= 0 ? titleOf(t) : ''),
+    artwork: P.coverUrl ? [{ src: P.coverUrl }] : [],
+  });
+}
+
+// Called while playing: notices when a new chapter starts.
+function updateChapter() {
+  const t = P.queue[P.index];
+  if (!t) return;
+  const k = chapterAt(t, audio.currentTime);
+  if (k === P.chapter) return;
+  P.chapter = k;
+  updateNowText(t);
+  updateSeekRange();
+  markPlaying();
+  if ($('queue').open) markQueue(false);
 }
 
 // The small "Next: …" line in the player.
 async function showUpNext() {
+  const cur = P.queue[P.index], ch = chaptersOf(cur);
+  if (ch && P.chapter >= 0 && P.chapter + 1 < ch.length) { $('nowNext').textContent = T.upNext(chapterTitle(cur, P.chapter + 1)); return; }
   const next = P.queue[P.index + 1];
   $('nowNext').textContent = next ? T.upNext(titleOf(next)) : '';
   if (next && !next.tags) {
@@ -1230,36 +1408,50 @@ async function showUpNext() {
 }
 
 // The "Up next" panel: every song in playing order; tapping one jumps to it.
+// Files with chapters are listed chapter by chapter.
 function showQueue() {
-  const rows = P.queue.map((t, i) => {
-    const title = el('div', { class: 't', text: titleOf(t) });
-    const sub = el('div', { class: 'a', text: artistOf(t) });
-    const row = el('button', { class: 'row', type: 'button', onclick: () => loadTrack(i, true) },
-      el('span', { class: 'no', text: i + 1 }), el('span', { class: 'eq' }, icon('volume')), el('span', { class: 'txt' }, title, sub));
-    row.fill = () => { title.textContent = titleOf(t); sub.textContent = artistOf(t); };
-    return row;
+  const rows = [], fileRows = new Map();
+  P.queue.forEach((t, i) => {
+    const ch = chaptersOf(t);
+    if (ch) ch.forEach((c, k) => rows.push(queueRow(i, k, chapterTitle(t, k), fmtTime(chapterEnd(t, k) - c.s))));
+    else { const r = queueRow(i, -1, titleOf(t), artistOf(t)); fileRows.set(i, r); rows.push(r); }
   });
   $('queueList').replaceChildren(...rows);
   $('queue').showModal();
   markQueue(true);
   // Songs from a restored session may not have their details yet.
-  const missing = P.queue.filter(t => !t.tags);
-  loadTags(missing, t => { const i = P.queue.indexOf(t); if (rows[i]) rows[i].fill(); });
+  loadTags(P.queue.filter(t => !t.tags), t => {
+    const r = fileRows.get(P.queue.indexOf(t));
+    if (r) r.fill(titleOf(t), artistOf(t));
+  });
 }
+function queueRow(i, k, title, sub) {
+  const tEl = el('div', { class: 't', text: title }), sEl = el('div', { class: 'a', text: sub });
+  const row = el('button', {
+    class: 'row', type: 'button', 'data-qi': i, 'data-chapter': k >= 0 ? k : null,
+    onclick: () => {
+      const start = k >= 0 ? chaptersOf(P.queue[i])[k].s : 0;
+      if (i === P.index && k >= 0) seekTo(start); else loadTrack(i, true, start);
+    },
+  }, el('span', { class: 'no', text: (k >= 0 ? k : i) + 1 }), el('span', { class: 'eq' }, icon('volume')), el('span', { class: 'txt' }, tEl, sEl));
+  row.fill = (a, b) => { tEl.textContent = a; sEl.textContent = b; };
+  return row;
+}
+const isPlayingRow = (r, index) => index === P.index && (r.dataset.chapter === undefined || +r.dataset.chapter === P.chapter);
 function markQueue(scroll) {
-  const rows = $('queueList').children;
-  for (let i = 0; i < rows.length; i++) {
-    const on = i === P.index;
-    rows[i].classList.toggle('playing', on);
-    if (on) rows[i].setAttribute('aria-current', 'true'); else rows[i].removeAttribute('aria-current');
+  let target = null;
+  for (const r of $('queueList').children) {
+    const on = isPlayingRow(r, +r.dataset.qi);
+    r.classList.toggle('playing', on);
+    if (on) { r.setAttribute('aria-current', 'true'); target = r; } else r.removeAttribute('aria-current');
   }
-  if (scroll && rows[P.index]) rows[P.index].scrollIntoView({ block: 'center' });
+  if (scroll && target) target.scrollIntoView({ block: 'center' });
 }
 
 function markPlaying() {
   const cur = P.queue[P.index] ? P.queue[P.index].path : null;
   for (const r of view.querySelectorAll('.row[data-path]')) {
-    const on = r.dataset.path === cur;
+    const on = r.dataset.path === cur && isPlayingRow(r, P.index);
     r.classList.toggle('playing', on);
     if (on) r.setAttribute('aria-current', 'true'); else r.removeAttribute('aria-current');
   }
@@ -1269,10 +1461,32 @@ function togglePlay() {
   if (P.index < 0) return;
   if (audio.paused) audio.play().catch(() => {}); else audio.pause();
 }
-function next() { if (P.index + 1 < P.queue.length) loadTrack(P.index + 1, true); }
+function seekTo(time) {
+  audio.currentTime = time;
+  updateChapter();
+  showTime();
+  audio.play().catch(() => {});
+}
+// ⏭ and ⏮ step through chapters first, then files.
+function next() {
+  const ch = chaptersOf(P.queue[P.index]);
+  if (ch && P.chapter >= 0 && P.chapter + 1 < ch.length) return seekTo(ch[P.chapter + 1].s);
+  if (P.index + 1 < P.queue.length) loadTrack(P.index + 1, true);
+}
 function prev() {
+  const ch = chaptersOf(P.queue[P.index]);
+  if (ch && P.chapter >= 0) {
+    const start = ch[P.chapter].s;
+    if (audio.currentTime - start > 3 || (P.chapter === 0 && P.index === 0)) return seekTo(start);
+    if (P.chapter > 0) return seekTo(ch[P.chapter - 1].s);
+  }
   if (audio.currentTime > 3 || P.index === 0) { audio.currentTime = 0; audio.play().catch(() => {}); }
   else loadTrack(P.index - 1, true);
+}
+function playChapter(tracks, i, k) {
+  const t = tracks[i], start = chaptersOf(t)[k].s;
+  if (P.queue[P.index] && P.queue[P.index].path === t.path) seekTo(start);
+  else playList(tracks, i, false, start);
 }
 
 async function restoreSession() {
@@ -1286,25 +1500,39 @@ async function restoreSession() {
 }
 
 function setRangeFill(r) {
-  const max = +r.max || 0;
-  r.style.setProperty('--p', (max ? (+r.value / max) * 100 : 0) + '%');
+  const min = +r.min || 0, max = +r.max || 0;
+  r.style.setProperty('--p', (max > min ? ((+r.value - min) / (max - min)) * 100 : 0) + '%');
+}
+
+// The progress bar covers the current chapter, or the whole file when it has none.
+function updateSeekRange() {
+  const t = P.queue[P.index], k = P.chapter;
+  const fileEnd = Number.isFinite(audio.duration) ? audio.duration : 0;
+  const start = k >= 0 ? chaptersOf(t)[k].s : 0;
+  const end = k < 0 ? fileEnd : k + 1 < chaptersOf(t).length ? chapterEnd(t, k) : fileEnd || chapterEnd(t, k);
+  seek.min = start;
+  seek.max = end;
+  $('tDur').textContent = fmtTime(end - start);
+  showTime();
+}
+function showTime() {
+  if (!P.seeking) seek.value = audio.currentTime;
+  setRangeFill(seek);
+  $('tCur').textContent = fmtTime(+seek.value - (+seek.min || 0));
 }
 
 const seek = $('seek');
 let lastSaved = 0;
 audio.addEventListener('timeupdate', () => {
-  if (!P.seeking) { seek.value = audio.currentTime; setRangeFill(seek); }
-  $('tCur').textContent = fmtTime(audio.currentTime);
+  updateChapter();
+  showTime();
   if (Math.abs(audio.currentTime - lastSaved) > 5) {
     lastSaved = audio.currentTime;
     saveTime();
   }
 });
-audio.addEventListener('durationchange', () => {
-  seek.max = Number.isFinite(audio.duration) ? audio.duration : 0;
-  $('tDur').textContent = fmtTime(audio.duration);
-  setRangeFill(seek);
-});
+audio.addEventListener('durationchange', updateSeekRange);
+audio.addEventListener('seeked', () => { updateChapter(); showTime(); });
 audio.addEventListener('play', () => {
   $('playIcon').setAttribute('href', '#i-pause');
   $('playBtn').setAttribute('aria-label', T.pause);
@@ -1330,8 +1558,8 @@ audio.addEventListener('error', () => {
   if (P.index >= 0 && audio.getAttribute('src')) skipBroken(P.queue[P.index], true);
 });
 
-seek.addEventListener('input', () => { P.seeking = true; setRangeFill(seek); $('tCur').textContent = fmtTime(+seek.value); });
-seek.addEventListener('change', () => { audio.currentTime = +seek.value; P.seeking = false; });
+seek.addEventListener('input', () => { P.seeking = true; showTime(); });
+seek.addEventListener('change', () => { audio.currentTime = +seek.value; P.seeking = false; updateChapter(); });
 
 const vol = $('volume');
 try { const v = localStorage.getItem(VOLUME_KEY); if (v !== null) vol.value = v; } catch { /* fine */ }
