@@ -1199,8 +1199,9 @@ function homeView() {
   const tiles = folders.map(f => el('button', { class: 'tile', type: 'button', onclick: () => openFolder(f, true) },
     el('div', { class: 'art', style: `--h:${hueOf(f.handle.name)}` }, icon(f.audiobooks ? 'book' : 'note')),
     el('div', { class: 'name', text: f.handle.name })));
-  tiles.push(el('button', { class: 'tile add', type: 'button', onclick: addFolder },
-    el('div', { class: 'art' }, icon('add')), el('div', { class: 'name', text: T.addFolder })));
+  // Just the plus; the name stays as tooltip and for screen readers.
+  tiles.push(el('button', { class: 'tile add', type: 'button', title: T.addFolder, 'aria-label': T.addFolder, onclick: addFolder },
+    el('div', { class: 'art' }, icon('add'))));
   return el('div', {},
     el('section', { class: 'head' }, el('div', { class: 'meta' }, el('h1', { text: T.homeTitle }))),
     el('div', { class: 'grid' }, tiles));
