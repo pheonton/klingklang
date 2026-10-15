@@ -15,12 +15,12 @@ app works without an internet connection once it has been opened once.
 3. Next time, the app opens straight to your music. If the browser asks for
    permission again, choose **Allow on every visit** and it won't ask anymore.
 
-Browse folders, click a song to play it and everything after it in that folder,
-or use **Play all** / **Shuffle**. Click the song in the player bar to jump to
-its folder. The app remembers the song and position you stopped at.
+Browse folders, click a track to play it and everything after it in that folder,
+or use **Play all** / **Shuffle**. Click the track in the player bar to jump to
+its folder. The app remembers the track and position you stopped at.
 
-The list button next to ⏭ opens **Up next**: every song in playing order (shuffled order after Shuffle), with
-the current one highlighted. Tap a song to jump to it.
+The list button next to ⏭ opens **Up next**: every track in playing order (shuffled order after Shuffle), with
+the current one highlighted. Tap a track to jump to it.
 
 ## Several music folders
 
@@ -35,7 +35,7 @@ Keep things like music and audiobooks apart by adding each as its own folder.
 - **Settings (gear) → Manage music folders** removes folders from the list (no files are
   touched) and switches audiobook mode on or off.
 
-Each folder remembers its own song and position, so switching to classical
+Each folder remembers its own track and position, so switching to classical
 music doesn't lose your place in an audiobook. If the browser asks for
 permission again, tapping the folder's tile is all it takes.
 
@@ -43,7 +43,7 @@ permission again, tapping the folder's tile is all it takes.
 
 Tick **Audiobooks** under a folder in *Settings (gear) → Manage music folders* (folders named with
 "Hörbuch", "Hörspiel" or "Audiobook" are ticked automatically when added). In
-such a folder every folder with songs in it counts as a book, and each book
+such a folder every folder with tracks in it counts as a book, and each book
 remembers its own chapter and position:
 
 - A started book shows **Continue** ("You stopped at …") and **Start over**,
@@ -59,9 +59,9 @@ A book split into subfolders (`CD 1`, `CD 2`) counts as one book per subfolder.
 In audiobook folders the book's page shows "Gesprochen von …" under the title.
 It comes from the **Composer** field (where Audible download tools put the
 narrator), or from **Conductor** when Composer is empty. Lists like
-`A;B` are shown as "A, B". When the songs in a folder have different narrators
-(podcasts, collections), each song shows its own. The player shows the first
-name only, plus "& weitere" when there are more. Music folders never show it,
+`A;B` are shown as "A, B". When the tracks in a folder have different narrators
+(podcasts, collections), each track shows its own. The player shows the first
+name only, plus "& weiteren" when there are more. Music folders never show it,
 because there Composer means the composer.
 
 ### Chapters
@@ -77,20 +77,20 @@ audiobook folders.
 
 - **Music:** only formats the browser plays by itself: MP3, M4A/AAC, FLAC,
   OGG, Opus, WAV. Other files are ignored.
-- **Song details:** title, artist, album, track and disc number from the tags
-  (ID3, Vorbis comments, MP4). Songs in a folder are sorted by disc and track
+- **Track details:** title, artist, album, track and disc number from the tags
+  (ID3, Vorbis comments, MP4). Tracks in a folder are sorted by disc and track
   number, then by file name. Details are kept in a small cache in the browser and
-  re-read automatically when a file changes. *Settings (gear) → Forget saved song details*
+  re-read automatically when a file changes. *Settings (gear) → Forget saved track details*
   clears it.
 - **Pictures:** `cover.jpg` in each folder, or else `cover.png`, `cover.webp`, `folder.jpg`,
   `folder.png`, `folder.webp` or `front.jpg` (see `COVER_NAMES` in `index.html`). It shows on
   the folder's tile, next to its title, and in the player while one of its
-  songs plays. A folder without its own picture borrows its subfolders'
+  tracks plays. A folder without its own picture borrows its subfolders'
   pictures (up to `COVER_DEPTH` levels down, 2 by default), so an artist shows a 2×2 collage of their
   album covers, or the one album cover if there are fewer than four.
   Embedded pictures in the music files are not used.
 - **Playlists:** `.m3u` and `.m3u8` files show up in the folder they're in. Paths
-  inside are relative to the playlist file; both `/` and `\` work. Songs that
+  inside are relative to the playlist file; both `/` and `\` work. Tracks that
   can't be found are shown greyed out and skipped.
 
 ## Hosting
@@ -103,6 +103,10 @@ Served as-is by GitHub Pages, no build step. The folder picker only works over
 When you change any file, bump `VERSION` in `sw.js` so installed copies update.
 
 ## Customizing
+
+The interface never says "Lieder" (songs), since nobody sings in a Bach
+movement or an audiobook: music folders count **Stücke**, audiobook folders
+**Kapitel**.
 
 - Texts are in `STRINGS` at the top of the script in `index.html` (English and
   German; the browser's language picks one). Add a language by copying a block.

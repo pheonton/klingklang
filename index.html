@@ -283,18 +283,19 @@ const STRINGS = {
     narratedBy: n => `Narrated by ${n}`,
     unsupportedTitle: 'This browser can’t open music folders',
     unsupportedText: 'Please open this page in Microsoft Edge or Google Chrome.',
-    folders: 'Folders', playlists: 'Playlists', songs: 'Songs',
+    folders: 'Folders', playlists: 'Playlists', tracksHeading: 'Tracks', chaptersHeading: 'Chapters',
     playAll: 'Play all', shuffle: 'Shuffle', loading: 'Loading…',
-    empty: 'There is no music in this folder.', notFound: 'This folder or playlist isn’t there anymore.',
-    songCount: n => n === 1 ? '1 song' : `${n} songs`, missing: 'Not found',
-    play: 'Play', pause: 'Pause', prev: 'Previous song', next: 'Next song', volume: 'Volume',
-    showAlbum: 'Show the folder of this song',
+    empty: 'There is nothing to play in this folder.', notFound: 'This folder or playlist isn’t there anymore.',
+    trackCount: n => n === 1 ? '1 track' : `${n} tracks`, missing: 'Not found',
+    play: 'Play', pause: 'Pause', volume: 'Volume',
+    prevTrack: 'Previous track', nextTrack: 'Next track', prevChapter: 'Previous chapter', nextChapter: 'Next chapter',
+    showAlbum: 'Go to its folder',
     upNextTitle: 'Up next', andOthers: '& others',
     chapterN: n => `Chapter ${n}`, chapterCount: n => n === 1 ? '1 chapter' : `${n} chapters`,
     cantPlay: n => `Couldn’t play “${n}”. Skipping it.`,
     permissionDenied: 'Without permission I can’t read your music.',
-    menuFolder: n => `Music folder: “${n}”. Folders are read fresh each time you open them, so new songs show up right away.`,
-    clearCache: 'Forget saved song details', cacheCleared: 'Done. Song details will be read again.',
+    menuFolder: n => `Music folder: “${n}”. Folders are read fresh each time you open them, so new things show up right away.`,
+    clearCache: 'Forget saved track details', cacheCleared: 'Done. Track details will be read again.',
   },
   de: {
     home: 'Start', back: 'Zurück', menu: 'Einstellungen', close: 'Schließen',
@@ -310,18 +311,19 @@ const STRINGS = {
     narratedBy: n => `Gesprochen von ${n}`,
     unsupportedTitle: 'Dieser Browser kann keine Musikordner öffnen',
     unsupportedText: 'Bitte öffne diese Seite in Microsoft Edge oder Google Chrome.',
-    folders: 'Ordner', playlists: 'Wiedergabelisten', songs: 'Lieder',
+    folders: 'Ordner', playlists: 'Wiedergabelisten', tracksHeading: 'Stücke', chaptersHeading: 'Kapitel',
     playAll: 'Alle abspielen', shuffle: 'Zufällig', loading: 'Wird geladen…',
-    empty: 'In diesem Ordner ist keine Musik.', notFound: 'Diesen Ordner oder diese Liste gibt es nicht mehr.',
-    songCount: n => n === 1 ? '1 Lied' : `${n} Lieder`, missing: 'Nicht gefunden',
-    play: 'Abspielen', pause: 'Pause', prev: 'Vorheriges Lied', next: 'Nächstes Lied', volume: 'Lautstärke',
-    showAlbum: 'Ordner dieses Liedes zeigen',
-    upNextTitle: 'Als Nächstes', andOthers: '& weitere',
+    empty: 'In diesem Ordner gibt es nichts zum Abspielen.', notFound: 'Diesen Ordner oder diese Liste gibt es nicht mehr.',
+    trackCount: n => n === 1 ? '1 Stück' : `${n} Stücke`, missing: 'Nicht gefunden',
+    play: 'Abspielen', pause: 'Pause', volume: 'Lautstärke',
+    prevTrack: 'Vorheriges Stück', nextTrack: 'Nächstes Stück', prevChapter: 'Vorheriges Kapitel', nextChapter: 'Nächstes Kapitel',
+    showAlbum: 'Zum Ordner wechseln',
+    upNextTitle: 'Als Nächstes', andOthers: '& weiteren',
     chapterN: n => `Kapitel ${n}`, chapterCount: n => `${n} Kapitel`,
     cantPlay: n => `„${n}“ lässt sich nicht abspielen. Weiter zum nächsten.`,
     permissionDenied: 'Ohne Erlaubnis kann ich deine Musik nicht lesen.',
-    menuFolder: n => `Musikordner: „${n}“. Ordner werden bei jedem Öffnen neu gelesen, neue Lieder erscheinen also sofort.`,
-    clearCache: 'Gespeicherte Liedinfos vergessen', cacheCleared: 'Erledigt. Die Liedinfos werden neu gelesen.',
+    menuFolder: n => `Musikordner: „${n}“. Ordner werden bei jedem Öffnen neu gelesen, Neues erscheint also sofort.`,
+    clearCache: 'Gespeicherte Titelangaben vergessen', cacheCleared: 'Erledigt. Die Titelangaben werden neu gelesen.',
   },
 };
 const LANG = (navigator.language || 'en').slice(0, 2) in STRINGS ? (navigator.language || 'en').slice(0, 2) : 'en';
@@ -409,8 +411,6 @@ function toast(msg) {
 
 for (const e of document.querySelectorAll('[data-t]')) e.textContent = T[e.dataset.t];
 $('menuBtn').title = T.menu; $('menuBtn').setAttribute('aria-label', T.menu);
-$('prevBtn').title = T.prev; $('prevBtn').setAttribute('aria-label', T.prev);
-$('nextBtn').title = T.next; $('nextBtn').setAttribute('aria-label', T.next);
 $('playBtn').setAttribute('aria-label', T.play);
 $('volume').setAttribute('aria-label', T.volume);
 $('now').title = T.showAlbum;
@@ -1087,7 +1087,7 @@ async function folderView(path, isCurrent) {
   const title = path ? path.slice(path.lastIndexOf('/') + 1) : root.name;
   const chapterTotal = playable.reduce((n, t) => n + (chaptersOf(t) ? chaptersOf(t).length : 0), 0);
   let resume = null;
-  let sub = !playable.length ? '' : playable.every(chaptersOf) ? T.chapterCount(chapterTotal) : T.songCount(playable.length);
+  let sub = !playable.length ? '' : playable.every(chaptersOf) ? T.chapterCount(chapterTotal) : countText(playable.length);
   const place = isBooks() && getBookPlace(path);
   const placeIndex = place ? playable.findIndex(t => t.path === place.path) : -1;
   if (placeIndex >= 0) {
@@ -1102,7 +1102,7 @@ async function folderView(path, isCurrent) {
   if (dirs.length) wrap.append(el('h2', { text: T.folders }), el('div', { class: 'grid' }, dirs.map(n => folderTile(join(path, n), n))));
   if (lists.length) wrap.append(el('h2', { text: T.playlists }), el('div', { class: 'grid' }, lists.map(n => listTile(join(path, n), n))));
   if (playable.length) {
-    if (dirs.length || lists.length) wrap.append(el('h2', { text: T.songs }));
+    if (dirs.length || lists.length) wrap.append(el('h2', { text: listHeading() }));
     // A file with chapters is listed chapter by chapter.
     wrap.append(el('div', { class: 'songs' }, playable.flatMap((t, i) => chaptersOf(t)
       ? chaptersOf(t).map((c, k) => chapterRow(t, i, k, playable))
@@ -1117,10 +1117,10 @@ async function playlistView(path, isCurrent) {
   if (!isCurrent()) return null;
   const rows = tracks.map((t, i) => songRow(t, i, tracks, false, true));
   const wrap = el('div', {},
-    head({ title: baseName(path.slice(path.lastIndexOf('/') + 1)), sub: T.songCount(tracks.filter(t => !t.missing).length), tracks }),
+    head({ title: baseName(path.slice(path.lastIndexOf('/') + 1)), sub: countText(tracks.filter(t => !t.missing).length), tracks }),
     el('div', { class: 'songs' }, rows));
   // Song details fill in as they are read, so long lists appear right away.
-  const count = () => T.songCount(tracks.filter(t => !t.missing).length);
+  const count = () => countText(tracks.filter(t => !t.missing).length);
   loadTags(tracks.filter(t => !t.missing), t => { if (isCurrent()) rows[tracks.indexOf(t)].fill(); })
     .then(() => { const sub = wrap.querySelector('.head .sub'); if (sub) sub.textContent = count(); });
   return wrap;
@@ -1210,6 +1210,7 @@ function activate(f) {
   root = f.handle;
   try { localStorage.setItem(CURRENT_KEY, f.id); } catch { /* fine */ }
   scrollMemory.clear();
+  updateSkipLabels();
   restoreSession();
 }
 
@@ -1280,12 +1281,20 @@ function showFolders() {
 async function setAudiobooks(f, on) {
   f.audiobooks = on;
   await saveFolders();
-  if (f === current) render();
+  if (f === current) { updateSkipLabels(); render(); }
 }
 
 /* ---------- Audiobooks ---------- */
 // In an audiobook folder, every folder with songs in it is a book and keeps its own place.
 const isBooks = () => !!(current && current.audiobooks);
+// Music folders count "Stücke", audiobook folders "Kapitel" ("Lieder" would mean someone sings).
+const countText = n => isBooks() ? T.chapterCount(n) : T.trackCount(n);
+const listHeading = () => isBooks() ? T.chaptersHeading : T.tracksHeading;
+function updateSkipLabels() {
+  const [p, n] = isBooks() ? [T.prevChapter, T.nextChapter] : [T.prevTrack, T.nextTrack];
+  $('prevBtn').title = p; $('prevBtn').setAttribute('aria-label', p);
+  $('nextBtn').title = n; $('nextBtn').setAttribute('aria-label', n);
+}
 const bookKey = dir => `fmp-book:${current.id}:${dir}`;
 function getBookPlace(dir) {
   try { return JSON.parse(localStorage.getItem(bookKey(dir)) || 'null'); } catch { return null; }
@@ -1628,6 +1637,7 @@ $('clearCacheBtn').addEventListener('click', async () => {
   render();
 });
 
+updateSkipLabels();
 start();
 
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
