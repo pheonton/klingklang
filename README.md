@@ -19,8 +19,7 @@ Browse folders, click a song to play it and everything after it in that folder,
 or use **Play all** / **Shuffle**. Click the song in the player bar to jump to
 its folder. The app remembers the song and position you stopped at.
 
-The player shows which song comes next. The list button next to ⏭ opens
-**Up next**: every song in playing order (shuffled order after Shuffle), with
+The list button next to ⏭ opens **Up next**: every song in playing order (shuffled order after Shuffle), with
 the current one highlighted. Tap a song to jump to it.
 
 ## Several music folders
@@ -54,6 +53,16 @@ remembers its own chapter and position:
   beginning next time.
 
 A book split into subfolders (`CD 1`, `CD 2`) counts as one book per subfolder.
+
+### Narrator
+
+In audiobook folders the book's page shows "Gesprochen von …" under the title.
+It comes from the **Composer** field (where Audible download tools put the
+narrator), or from **Conductor** when Composer is empty. Lists like
+`A;B` are shown as "A, B". When the songs in a folder have different narrators
+(podcasts, collections), each song shows its own. The player shows the first
+name only, plus "& weitere" when there are more. Music folders never show it,
+because there Composer means the composer.
 
 ### Chapters
 

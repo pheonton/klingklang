@@ -78,6 +78,7 @@ main{max-width:1200px;margin:0 auto;padding:20px 16px 40px}
 .head .cover{width:180px;height:180px;border-radius:var(--radius);box-shadow:var(--shadow);object-fit:cover;flex:none;background:var(--surface-2)}
 .head .meta{min-width:0;flex:1}
 .head h1{font-size:2.1rem;line-height:1.15;margin:0 0 6px;overflow-wrap:anywhere}
+.head .by{margin:0 0 4px;font-size:1.05rem}
 .head .sub{color:var(--muted);margin:0 0 14px}
 .head .actions{display:flex;flex-wrap:wrap;gap:10px}
 
@@ -218,7 +219,7 @@ body:not(.has-player) .toast{bottom:24px}
     <button class="now" id="now" type="button">
       <span class="ph" id="nowPh"><svg class="i"><use href="#i-note"/></svg></span>
       <img id="nowImg" alt="" hidden>
-      <span class="txt"><div class="t" id="nowTitle"></div><div class="a" id="nowArtist"></div><div class="n" id="nowNext"></div></span>
+      <span class="txt"><div class="t" id="nowTitle"></div><div class="a" id="nowArtist"></div><div class="n" id="nowBy"></div></span>
     </button>
     <div class="ctl">
       <button class="iconbtn" id="prevBtn" type="button"><svg class="i"><use href="#i-prev"/></svg></button>
@@ -279,6 +280,7 @@ const STRINGS = {
     audiobooks: 'Audiobooks: each book remembers its own place',
     continue: 'Continue', startOver: 'Start over', started: 'Started',
     stoppedAt: (t, time) => `You stopped at “${t}”, ${time}.`,
+    narratedBy: n => `Narrated by ${n}`,
     unsupportedTitle: 'This browser can’t open music folders',
     unsupportedText: 'Please open this page in Microsoft Edge or Google Chrome.',
     folders: 'Folders', playlists: 'Playlists', songs: 'Songs',
@@ -287,7 +289,7 @@ const STRINGS = {
     songCount: n => n === 1 ? '1 song' : `${n} songs`, missing: 'Not found',
     play: 'Play', pause: 'Pause', prev: 'Previous song', next: 'Next song', volume: 'Volume',
     showAlbum: 'Show the folder of this song',
-    upNext: t => `Next: ${t}`, upNextTitle: 'Up next',
+    upNextTitle: 'Up next', andOthers: '& others',
     chapterN: n => `Chapter ${n}`, chapterCount: n => n === 1 ? '1 chapter' : `${n} chapters`,
     cantPlay: n => `Couldn’t play “${n}”. Skipping it.`,
     permissionDenied: 'Without permission I can’t read your music.',
@@ -305,6 +307,7 @@ const STRINGS = {
     audiobooks: 'Hörbücher: jedes Buch merkt sich seine Stelle',
     continue: 'Weiterhören', startOver: 'Von vorne', started: 'Angefangen',
     stoppedAt: (t, time) => `Du warst bei „${t}“, ${time}.`,
+    narratedBy: n => `Gesprochen von ${n}`,
     unsupportedTitle: 'Dieser Browser kann keine Musikordner öffnen',
     unsupportedText: 'Bitte öffne diese Seite in Microsoft Edge oder Google Chrome.',
     folders: 'Ordner', playlists: 'Wiedergabelisten', songs: 'Lieder',
@@ -313,7 +316,7 @@ const STRINGS = {
     songCount: n => n === 1 ? '1 Lied' : `${n} Lieder`, missing: 'Nicht gefunden',
     play: 'Abspielen', pause: 'Pause', prev: 'Vorheriges Lied', next: 'Nächstes Lied', volume: 'Lautstärke',
     showAlbum: 'Ordner dieses Liedes zeigen',
-    upNext: t => `Als Nächstes: ${t}`, upNextTitle: 'Als Nächstes',
+    upNextTitle: 'Als Nächstes', andOthers: '& weitere',
     chapterN: n => `Kapitel ${n}`, chapterCount: n => `${n} Kapitel`,
     cantPlay: n => `„${n}“ lässt sich nicht abspielen. Weiter zum nächsten.`,
     permissionDenied: 'Ohne Erlaubnis kann ich deine Musik nicht lesen.',
@@ -479,8 +482,8 @@ function id3Text(d) {
 }
 
 const ID3_FRAMES = {
-  2: { TT2: 'title', TP1: 'artist', TAL: 'album', TRK: 'track', TPA: 'disc', TP2: 'albumArtist' },
-  3: { TIT2: 'title', TPE1: 'artist', TALB: 'album', TRCK: 'track', TPOS: 'disc', TPE2: 'albumArtist' },
+  2: { TT2: 'title', TP1: 'artist', TAL: 'album', TRK: 'track', TPA: 'disc', TP2: 'albumArtist', TCM: 'composer', TP3: 'conductor' },
+  3: { TIT2: 'title', TPE1: 'artist', TALB: 'album', TRCK: 'track', TPOS: 'disc', TPE2: 'albumArtist', TCOM: 'composer', TPE3: 'conductor' },
 };
 
 async function readId3v2(file) {
@@ -537,7 +540,10 @@ async function readId3v1(file) {
   return tags;
 }
 
-const VORBIS_KEYS = { TITLE: 'title', ARTIST: 'artist', ALBUM: 'album', TRACKNUMBER: 'track', DISCNUMBER: 'disc', ALBUMARTIST: 'albumArtist' };
+const VORBIS_KEYS = {
+  TITLE: 'title', ARTIST: 'artist', ALBUM: 'album', TRACKNUMBER: 'track', DISCNUMBER: 'disc', ALBUMARTIST: 'albumArtist',
+  COMPOSER: 'composer', CONDUCTOR: 'conductor',
+};
 function readVorbisComments(d, p) {
   const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
   const tags = {};
@@ -717,7 +723,9 @@ async function readMp4Chapters(file, d) {
   return out;
 }
 
-const MP4_KEYS = { '©nam': 'title', '©ART': 'artist', '©alb': 'album', aART: 'albumArtist' };
+const MP4_KEYS = { '©nam': 'title', '©ART': 'artist', '©alb': 'album', aART: 'albumArtist', '©wrt': 'composer' };
+// MP4 has no conductor box; taggers store it as a named "----" item.
+const MP4_FREEFORM_KEYS = { CONDUCTOR: 'conductor' };
 async function readMp4(file) {
   let pos = 0;
   for (let i = 0; i < 64 && pos + 8 <= file.size; i++) {
@@ -755,7 +763,9 @@ function readMoov(d) {
     const data = mp4Child(d, p + 8, Math.min(p + len, ilst[1]), 'data');
     if (data && data[1] - data[0] > 8) {
       const v = d.subarray(data[0] + 8, data[1]);
-      if (MP4_KEYS[type]) { const s = utf8.decode(v).trim(); if (s) tags[MP4_KEYS[type]] = s; }
+      const name = type === '----' && mp4Child(d, p + 8, Math.min(p + len, ilst[1]), 'name');
+      const key = name ? MP4_FREEFORM_KEYS[ascii(d, name[0] + 4, name[1]).toUpperCase()] : MP4_KEYS[type];
+      if (key) { const s = utf8.decode(v).trim(); if (s) tags[key] = s; }
       else if ((type === 'trkn' || type === 'disk') && v.length >= 4) {
         const n = v[2] << 8 | v[3];
         if (n) tags[type === 'trkn' ? 'track' : 'disc'] = String(n);
@@ -785,7 +795,7 @@ let dirCache = new Map();   // folder path -> Promise<DirectoryHandle>; emptied 
 let coverCache = new Map(); // folder path -> Promise<object URL or null>
 const tagMem = new Map();   // "folder id:path|size|date" -> tags
 // Raise when readTags learns something new, so cached song details are read again.
-const TAGS_VERSION = 2;
+const TAGS_VERSION = 3;
 
 function getDir(path) {
   if (!path) return Promise.resolve(root);
@@ -847,6 +857,15 @@ async function loadTags(tracks, onEach) {
 
 const titleOf = t => (t.tags && t.tags.title) || t.extTitle || baseName(t.name);
 const artistOf = t => (t.tags && (t.tags.artist || t.tags.albumArtist)) || '';
+
+// In audiobook folders Composer holds the narrator (Audible's habit), else Conductor.
+// "A;B" lists are shown as "A, B". Other folders never show it: there Composer means composer.
+// Lists come as "A;B", or "A, B" when a tag holds several values.
+function narratorsOf(t) {
+  if (!isBooks() || !t.tags) return [];
+  return (t.tags.composer || t.tags.conductor || '').split(/\s*[;,]\s*/).filter(Boolean);
+}
+const narratorOf = t => narratorsOf(t).join(', ');
 
 // Chapters inside one file (M4B audiobooks): [{ t: title, s: start in seconds }].
 const chaptersOf = t => (t && t.tags && t.tags.chapters) || null;
@@ -961,7 +980,7 @@ function updatePathBar(route) {
   $('crumbbar').replaceChildren(...parts);
 }
 
-function head({ title, coverUrl, sub, tracks, resume }) {
+function head({ title, byline, coverUrl, sub, tracks, resume }) {
   let actions = null;
   if (resume) {
     actions = el('div', { class: 'actions' },
@@ -976,6 +995,7 @@ function head({ title, coverUrl, sub, tracks, resume }) {
     coverUrl ? el('img', { class: 'cover', src: coverUrl, alt: '' }) : null,
     el('div', { class: 'meta' },
       el('h1', { text: title }),
+      byline ? el('p', { class: 'by', text: byline }) : null,
       sub ? el('p', { class: 'sub', text: sub }) : null,
       actions,
     ),
@@ -1027,7 +1047,7 @@ function listTile(path, name) {
     el('div', { class: 'name', text: baseName(name) }));
 }
 
-function songRow(t, i, tracks, showNumber, showAlbum) {
+function songRow(t, i, tracks, showNumber, showAlbum, showNarrator) {
   const sub = el('div', { class: 'a' });
   const title = el('div', { class: 't' });
   const no = el('span', { class: 'no' });
@@ -1037,6 +1057,7 @@ function songRow(t, i, tracks, showNumber, showAlbum) {
     title.textContent = titleOf(t);
     const bits = [artistOf(t)];
     if (showAlbum && t.tags && t.tags.album) bits.push(t.tags.album);
+    if (showNarrator && narratorOf(t)) bits.push(T.narratedBy(narratorOf(t)));
     sub.textContent = t.missing ? T.missing : bits.filter(Boolean).join(' · ');
     no.textContent = showNumber ? (toNum(t.tags && t.tags.track) || '') : i + 1;
     row.classList.toggle('missing', !!t.missing);
@@ -1074,7 +1095,10 @@ async function folderView(path, isCurrent) {
     resume = { index: placeIndex, time: Math.max(0, place.time - RESUME_REWIND) };
     sub = k >= 0 ? T.stoppedAt(chapterTitle(t, k), fmtTime(place.time - chaptersOf(t)[k].s)) : T.stoppedAt(titleOf(t), fmtTime(place.time));
   }
-  const wrap = el('div', {}, head({ title, coverUrl, sub, tracks: playable, resume }));
+  // One narrator for the whole book goes under the title; several (podcasts, collections) go on each song.
+  const narrators = [...new Set(playable.map(narratorOf).filter(Boolean))];
+  const byline = narrators.length === 1 ? T.narratedBy(narrators[0]) : '';
+  const wrap = el('div', {}, head({ title, byline, coverUrl, sub, tracks: playable, resume }));
   if (dirs.length) wrap.append(el('h2', { text: T.folders }), el('div', { class: 'grid' }, dirs.map(n => folderTile(join(path, n), n))));
   if (lists.length) wrap.append(el('h2', { text: T.playlists }), el('div', { class: 'grid' }, lists.map(n => listTile(join(path, n), n))));
   if (playable.length) {
@@ -1082,7 +1106,7 @@ async function folderView(path, isCurrent) {
     // A file with chapters is listed chapter by chapter.
     wrap.append(el('div', { class: 'songs' }, playable.flatMap((t, i) => chaptersOf(t)
       ? chaptersOf(t).map((c, k) => chapterRow(t, i, k, playable))
-      : [songRow(t, i, playable, true, false)])));
+      : [songRow(t, i, playable, true, false, narrators.length > 1)])));
   }
   if (!dirs.length && !lists.length && !playable.length) wrap.append(el('p', { class: 'empty', text: T.empty }));
   return wrap;
@@ -1342,7 +1366,7 @@ function stopPlayer() {
   P.url = null; P.coverUrl = null; P.queue = []; P.index = -1; P.chapter = -1;
   seek.min = 0;
   $('player').hidden = true;
-  $('nowNext').textContent = '';
+  $('nowBy').textContent = '';
   if ($('queue').open) $('queue').close();
   document.body.classList.remove('has-player');
   document.title = APP_NAME;
@@ -1372,7 +1396,9 @@ function updateNowText(t) {
   $('nowArtist').textContent = (k >= 0 ? [(t.tags && t.tags.album) || titleOf(t), artistOf(t)] : [artistOf(t), t.tags && t.tags.album])
     .filter(Boolean).join(' · ');
   document.title = title + ' – ' + APP_NAME;
-  showUpNext();
+  // Audiobooks: the narrator, shortened to the first name on the list.
+  const names = narratorsOf(t);
+  $('nowBy').textContent = names.length ? T.narratedBy(names[0] + (names.length > 1 ? ' ' + T.andOthers : '')) : '';
   updateMediaSession(t);
 }
 function updateMediaSession(t) {
@@ -1396,18 +1422,6 @@ function updateChapter() {
   updateSeekRange();
   markPlaying();
   if ($('queue').open) markQueue(false);
-}
-
-// The small "Next: …" line in the player.
-async function showUpNext() {
-  const cur = P.queue[P.index], ch = chaptersOf(cur);
-  if (ch && P.chapter >= 0 && P.chapter + 1 < ch.length) { $('nowNext').textContent = T.upNext(chapterTitle(cur, P.chapter + 1)); return; }
-  const next = P.queue[P.index + 1];
-  $('nowNext').textContent = next ? T.upNext(titleOf(next)) : '';
-  if (next && !next.tags) {
-    next.tags = await getTags(next).catch(() => ({}));
-    if (P.queue[P.index + 1] === next) $('nowNext').textContent = T.upNext(titleOf(next));
-  }
 }
 
 // The "Up next" panel: every song in playing order; tapping one jumps to it.
