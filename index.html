@@ -942,10 +942,11 @@ const MAX_SUBFOLDERS = 3;
 
 function updatePathBar(route) {
   const items = [{ href: '#home', label: T.home, icon: 'home', cls: 'home', here: route.kind === 'home' }];
-  if (root) {
-    const segs = route.kind === 'home' ? [] : route.path.split('/').filter(Boolean);
+  // On Start the folders are the tiles below, so the bar shows Start alone.
+  if (root && route.kind !== 'home') {
+    const segs = route.path.split('/').filter(Boolean);
     const isList = route.kind === 'list';
-    items.push({ href: '#/', label: root.name, icon: current.audiobooks ? 'book' : 'folder', here: route.kind !== 'home' && !segs.length });
+    items.push({ href: '#/', label: root.name, icon: current.audiobooks ? 'book' : 'folder', here: !segs.length });
     const subs = segs.map((name, i) => {
       const last = i === segs.length - 1;
       return isList && last
