@@ -64,6 +64,13 @@ narrator), or from **Conductor** when Composer is empty. Lists like
 name only, plus "& weiteren" when there are more. Music folders never show it,
 because there Composer means the composer.
 
+### Language
+
+In audiobook folders each book's tile gets a small **DE** / **EN** badge (full
+name on hover), so *The Hobbit* and *Der Hobbit* are easy to tell apart. It
+comes from the first file's language tag, read through the song details cache;
+codes (`ger`, `eng`) and words (`German`, `Englisch`) both work.
+
 ### Chapters
 
 M4B (and M4A) files with chapter marks are shown chapter by chapter: the book's

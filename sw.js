@@ -1,7 +1,7 @@
 /* Klingklang: keeps a copy of the app's own files so it opens without a connection.
    Your music is never copied here; it is always read straight from your folder.
    Change VERSION whenever you change any file, so browsers fetch the new copies. */
-const VERSION = 'v17';
+const VERSION = 'v18';
 const CACHE = 'klingklang-' + VERSION;
 const ASSETS = [
   "./",
